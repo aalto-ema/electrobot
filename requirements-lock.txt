@@ -1,0 +1,12 @@
+manifold3d==3.5.4
+mapbox_earcut==2.1.0
+numpy==2.5.3
+opencv-python==4.14.0.94
+PySide6==6.12.0
+PySide6_Addons==6.12.0
+PySide6_Essentials==6.12.0
+PySide6_Pdf==6.12.0.140
+PySide6_WebEngine==6.12.0.140
+shapely==2.2.0
+shiboken6==6.12.0
+trimesh==4.12.2

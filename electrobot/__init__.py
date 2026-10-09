@@ -1,0 +1,1 @@
+"""Electrobot desktop workbench."""

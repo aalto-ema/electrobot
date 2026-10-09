@@ -12,8 +12,10 @@ python -m venv .venv
 source .venv/bin/activate
 # Windows PowerShell: .venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
-python -m electrobot
+python run_app.py
 ```
+
+After setup, double-click **Start Electrobot.command** on macOS or **Start Electrobot.bat** on Windows. Both use the project’s `.venv` automatically, with no activation needed. You can also run `python run_app.py` from a terminal; it prefers `.venv` when present.
 
 The dashboard runs a batch, overlays synthetic CV curves, pauses/resumes and stops. Experiment, cell/carrier and robot/rack pages provide editable settings with validation. Save persists `settings.json`; load accepts saved configurations. Each batch produces settings, event log, status summary and per-electrode CSVs in `runs/`. Stops retain partial data and record status; no recovery motion is simulated after stopping. Simulation timestamps represent protocol time; execution is accelerated by the configured multiplier.
 

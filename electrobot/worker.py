@@ -1,0 +1,96 @@
+"""One serialized device owner; GUI only submits commands or sets cancel events."""
+import queue
+from pathlib import Path
+from PySide6.QtCore import QThread,Signal
+from .engine import Control,Cancelled,Experiment,SimRobot,SimPotentiostat
+from .drivers import DobotRobot,PalmSensPotentiostat
+
+class DeviceWorker(QThread):
+    state=Signal(dict); pose=Signal(dict); event=Signal(dict)
+    point=Signal(int,float,float,float); result=Signal(str,str)
+    completed=Signal(str,bool,str)
+    def __init__(self,output):
+        super().__init__(); self.output=Path(output); self.commands=queue.Queue()
+        self.control=Control(); self.robot=None; self.pot=None
+        self.robot_connected=False; self.pot_connected=False; self.mode='simulation'
+    def submit(self,command,settings,payload=None):
+        control=Control(); self.control=control
+        self.commands.put((command,settings,payload,control))
+    def cancel(self):
+        self.control.cancel.set(); self.control.resume.set()
+    def shutdown(self):
+        self.cancel(); self.commands.put(('shutdown',None,None,None))
+    def emit_pose(self,pose):
+        self.pose.emit(pose); self.publish()
+    def publish(self):
+        self.state.emit({'mode':self.mode,'robot':self.robot_connected,'potentiostat':self.pot_connected,
+            'homed':bool(self.robot and self.robot.homed),
+            'holding':bool(self.robot and self.robot.holding),
+            'potentiostat_name':self.pot.name if self.pot_connected else 'Disconnected'})
+    def close_devices(self):
+        errors=[]
+        for attr,flag in (('pot','pot_connected'),('robot','robot_connected')):
+            device=getattr(self,attr)
+            if device:
+                try: device.disconnect()
+                except Exception as exc: errors.append(f'{attr}: {exc}')
+            setattr(self,attr,None); setattr(self,flag,False)
+        if errors: raise RuntimeError('; '.join(errors))
+    def setup(self,s,control):
+        if self.robot is None or self.mode!=s.mode:
+            self.close_devices(); self.mode=s.mode
+            if s.mode=='simulation':
+                self.robot=SimRobot(s,control); self.pot=SimPotentiostat(s)
+                self.robot_connected=True; self.pot_connected=True
+            else:
+                self.robot=DobotRobot(s,control); self.pot=PalmSensPotentiostat(s)
+            self.robot.pose_callback=self.emit_pose
+        self.robot.s=s; self.robot.control=control; self.pot.s=s
+    def run(self):
+        while True:
+            command,s,payload,control=self.commands.get()
+            if command=='shutdown':
+                try: self.close_devices()
+                except Exception as exc: self.completed.emit(command,False,str(exc))
+                self.publish(); return
+            ok=True; message=''
+            try:
+                s.validate(); self.setup(s,control); control.check()
+                if command=='configure':
+                    if self.robot_connected: self.robot.pose()
+                elif command=='connect_robot':
+                    self.robot.connect(); self.robot_connected=True
+                elif command=='connect_potentiostat':
+                    self.pot.connect(); self.pot_connected=True
+                elif command=='disconnect':
+                    self.close_devices()
+                elif command=='run':
+                    if not self.robot_connected or not self.pot_connected:
+                        raise RuntimeError('Connect both the robot and potentiostat before starting a batch')
+                    folder,status=Experiment(s,control,self.event.emit,self.point.emit,self.output,
+                        self.robot,self.pot).run()
+                    self.result.emit(str(folder),status)
+                else:
+                    if not self.robot_connected: raise RuntimeError('Connect the robot first')
+                    if command=='home': self.robot.home()
+                    elif command=='pose': self.robot.pose()
+                    elif command=='move': self.robot.move(payload)
+                    elif command=='jog':
+                        pose=self.robot.pose(); target=[pose[k] for k in ('x','y','z','r')]
+                        axis,delta=payload; target[axis]+=delta; self.robot.move(target)
+                    elif command=='grip': self.robot.grip(payload)
+                    elif command=='stop': self.robot.stop()
+                    else: raise ValueError(f'Unknown command: {command}')
+                    if command!='stop': self.robot.pose()
+            except Cancelled:
+                ok=False; message='Stopped'
+                if self.robot_connected:
+                    try: self.robot.stop()
+                    except Exception as exc: message+=f'; stop failed: {exc}'
+            except Exception as exc:
+                ok=False; message=str(exc)
+                if command in ('home','move','jog','grip','run') and self.robot_connected:
+                    try: self.robot.stop()
+                    except Exception as cleanup: message+=f'; stop failed: {cleanup}'
+            finally:
+                self.publish(); self.completed.emit(command,ok,message)

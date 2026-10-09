@@ -1,232 +1,368 @@
 import json
 import sys
-from pathlib import Path
 from dataclasses import asdict
-from PySide6.QtCore import Qt, QThread, Signal, QPointF, QRectF, QTimer
-from PySide6.QtGui import QColor, QPainter, QPen, QPainterPath, QPixmap, QDesktopServices
-from PySide6.QtCore import QUrl
+from pathlib import Path
+from PySide6.QtCore import Qt,QTimer,QUrl
+from PySide6.QtGui import QPixmap,QDesktopServices
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QLabel,QPushButton,
-    QVBoxLayout,QHBoxLayout,QGridLayout,QListWidget,QStackedWidget,QGroupBox,
-    QFormLayout,QDoubleSpinBox,QSpinBox,QLineEdit,QComboBox,QScrollArea,
-    QProgressBar,QPlainTextEdit,QFileDialog,QMessageBox,QSplitter)
+    QVBoxLayout,QHBoxLayout,QGridLayout,QListWidget,QStackedWidget,QGroupBox,QFormLayout,
+    QDoubleSpinBox,QSpinBox,QLineEdit,QComboBox,QCheckBox,QScrollArea,QProgressBar,
+    QPlainTextEdit,QFileDialog,QMessageBox,QSplitter,QTabWidget,QTableWidget,QTableWidgetItem,
+    QHeaderView,QAbstractItemView,QSizePolicy)
 from .config import Settings
-from .engine import Experiment,Control
+from .worker import DeviceWorker
 from .camera import CameraWorker
+from .widgets import Plot,CapSketch,CameraPreview,STYLE,button,card
 
 ROOT=Path(__file__).resolve().parent.parent
-COLORS=['#0e9f92','#635bce','#d58a24','#ce5275','#3285c8']
-
-class RunWorker(QThread):
-    event=Signal(dict); point=Signal(int,float,float,float); result=Signal(str,str)
-    def __init__(self,s):
-        super().__init__(); self.s=s; self.control=Control()
-    def run(self):
-        try:
-            folder,status=Experiment(self.s,self.control,self.event.emit,self.point.emit,ROOT/'runs').run()
-            self.result.emit(str(folder),status)
-        except Exception as exc: self.result.emit('',f'failed: {exc}')
-
-class Plot(QWidget):
-    def __init__(self):
-        super().__init__(); self.setMinimumHeight(285); self.data={}; self.selected=None
-    def add(self,index,t,e,i):
-        self.data.setdefault(index,[]).append((e,i))
-    def paintEvent(self,event):
-        p=QPainter(self); p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        r=QRectF(65,35,max(20,self.width()-95),max(20,self.height()-85))
-        allpoints=[v for values in self.data.values() for v in values]
-        lo=min([v[0] for v in allpoints]+[-.5]); hi=max([v[0] for v in allpoints]+[.5])
-        imax=max([abs(v[1]) for v in allpoints]+[60])*1.1
-        p.setPen(QColor('#8b99a7'))
-        for k in range(5):
-            y=r.top()+k*r.height()/4
-            p.setPen(QPen(QColor('#e7edf2'),1)); p.drawLine(QPointF(r.left(),y),QPointF(r.right(),y))
-            p.setPen(QColor('#728191')); p.drawText(QRectF(0,y-9,55,18),Qt.AlignmentFlag.AlignRight,f'{imax-k*imax/2:.0f}')
-            x=r.left()+k*r.width()/4
-            p.drawText(QRectF(x-30,r.bottom()+8,60,20),Qt.AlignmentFlag.AlignCenter,f'{lo+k*(hi-lo)/4:.2f}')
-        p.drawText(12,20,'Current (µA) · synthetic'); p.drawText(int(r.center().x()-45),self.height()-7,'Potential (V)')
-        for index,values in self.data.items():
-            if self.selected is not None and index!=self.selected: continue
-            path=QPainterPath()
-            for n,(e,i) in enumerate(values):
-                xy=QPointF(r.left()+(e-lo)/(hi-lo)*r.width(),r.center().y()-i/imax*r.height()/2)
-                path.moveTo(xy) if n==0 else path.lineTo(xy)
-            p.setPen(QPen(QColor(COLORS[(index-1)%len(COLORS)]),2)); p.drawPath(path)
-        if not allpoints:
-            p.setPen(QColor('#8b99a7')); p.drawText(r,Qt.AlignmentFlag.AlignCenter,'Start a simulated run to see the CV curves')
-
-class CapSketch(QWidget):
-    def __init__(self,s):
-        super().__init__(); self.s=s; self.setMinimumHeight(300)
-    def paintEvent(self,event):
-        s=self.s; p=QPainter(self); p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        d=s.rim_diameter+s.cap_clearance+2*s.cap_wall
-        scale=min((self.width()-110)/d,(self.height()-90)/d)
-        cx=self.width()/2; cy=self.height()/2
-        def circle(x,y,diameter,fill):
-            p.setBrush(QColor(fill)); p.setPen(QPen(QColor('#2f6073'),1.5))
-            p.drawEllipse(QPointF(cx+x*scale,cy+y*scale),diameter*scale/2,diameter*scale/2)
-        circle(0,0,d,'#d8efeb'); circle(0,0,s.rim_diameter+s.cap_clearance,'#eef8f6')
-        p.setBrush(Qt.BrushStyle.NoBrush); p.setPen(QPen(QColor('#95b8b2'),1,Qt.PenStyle.DashLine))
-        p.drawEllipse(QPointF(cx,cy),s.beaker_diameter*scale/2,s.beaker_diameter*scale/2)
-        circle(0,0,s.funnel_diameter,'#b4d9d1'); circle(0,0,s.rod_diameter+s.we_clearance,'white')
-        circle(-s.port_offset,0,s.re_hole,'white'); circle(s.port_offset,0,s.ce_hole,'white')
-        p.setPen(QColor('#163c4b'))
-        for x,text in ((-s.port_offset,'RE'),(0,'WE'),(s.port_offset,'CE')):
-            p.drawText(QRectF(cx+x*scale-25,cy+27,50,25),Qt.AlignmentFlag.AlignCenter,text)
-        p.fillRect(QRectF(cx-6*scale,cy-d*scale/2,12*scale,s.cap_wall*scale+2*scale),QColor('#f7fafc'))
-        p.drawText(QRectF(0,10,self.width(),30),Qt.AlignmentFlag.AlignCenter,f'Top view · Ø {d:.1f} mm · not to scale')
-        p.drawText(QRectF(0,self.height()-35,self.width(),25),Qt.AlignmentFlag.AlignCenter,'Spout notch / vent at top · dry WE contact still to be designed')
-
-def button(text,callback,primary=False):
-    b=QPushButton(text); b.clicked.connect(callback)
-    if primary: b.setObjectName('primary')
-    return b
-
-def card(title):
-    w=QGroupBox(title); layout=QVBoxLayout(w); layout.setContentsMargins(18,24,18,18)
-    return w,layout
 
 class Window(QMainWindow):
     def __init__(self):
-        super().__init__(); self.setWindowTitle('Electrobot · Electrochemistry Workbench'); self.resize(1280,900)
-        self.s=Settings(); self.fields={}; self.worker=None; self.camera=None; self.last_frame=None; self.output=None
-        self.paused=False; self._close_pending=False
+        super().__init__(); self.setWindowTitle('Electrobot · Electrochemistry Workbench')
+        self.resize(1440,960); self.setMinimumSize(1120,760)
+        self.s=Settings(); self.fields={}; self.busy=False; self.running_batch=False
+        self.paused=False; self.camera=None; self.last_frame=None; self.output=None
+        self._close_pending=False; self._shutdown_sent=False; self.current_pose=None
+        self.device_state={'robot':False,'potentiostat':False,'homed':False,'holding':False}
         if (ROOT/'settings.json').exists():
             try: self.s=Settings(**json.loads((ROOT/'settings.json').read_text())).validate()
-            except Exception: pass
-        base=QWidget(); self.setCentralWidget(base); shell=QHBoxLayout(base); shell.setContentsMargins(0,0,0,0); shell.setSpacing(0)
-        sidebar=QWidget(); sidebar.setObjectName('sidebar'); sidebar.setFixedWidth(220); navlayout=QVBoxLayout(sidebar)
-        navlayout.setContentsMargins(22,30,22,24)
-        brand=QLabel('electrobot'); brand.setObjectName('brand'); navlayout.addWidget(brand)
-        sub=QLabel('ELECTROCHEMISTRY\nWORKBENCH'); sub.setObjectName('navsub'); navlayout.addWidget(sub); navlayout.addSpacing(35)
-        self.nav=QListWidget(); self.nav.addItems(['Run dashboard','Experiment settings','Cell & carrier','Robot & rack','Camera']); navlayout.addWidget(self.nav)
-        footer=QLabel('SIMULATION MODE\nHardware integration pending'); footer.setObjectName('navsub'); footer.setWordWrap(True); navlayout.addWidget(footer)
-        shell.addWidget(sidebar); content=QWidget(); main=QVBoxLayout(content); main.setContentsMargins(30,24,30,24); main.setSpacing(18)
-        header=QHBoxLayout(); self.heading=QLabel('Run dashboard'); self.heading.setObjectName('heading'); header.addWidget(self.heading); header.addStretch()
-        badge=QLabel('●  SIMULATION'); badge.setObjectName('badge'); header.addWidget(badge); main.addLayout(header)
+            except Exception as exc: self.load_error=str(exc)
+        # Device mode is deliberately selected each session; loading a profile never connects hardware.
+        self.s.mode='simulation'
+        base=QWidget(); self.setCentralWidget(base); shell=QHBoxLayout(base)
+        shell.setContentsMargins(0,0,0,0); shell.setSpacing(0)
+        sidebar=QWidget(); sidebar.setObjectName('sidebar'); sidebar.setFixedWidth(195)
+        sl=QVBoxLayout(sidebar); sl.setContentsMargins(20,30,20,24)
+        brand=QLabel('electrobot'); brand.setObjectName('brand'); sl.addWidget(brand)
+        subtitle=QLabel('ELECTROCHEMISTRY\nWORKBENCH'); subtitle.setObjectName('navsub'); sl.addWidget(subtitle); sl.addSpacing(30)
+        self.nav=QListWidget(); self.nav.addItems(['Experiment','Manual robot','Settings']); sl.addWidget(self.nav)
+        self.sidebar_status=QLabel('Simulation\nNo physical commands'); self.sidebar_status.setObjectName('navsub'); self.sidebar_status.setWordWrap(True); sl.addWidget(self.sidebar_status)
+        shell.addWidget(sidebar); content=QWidget(); main=QVBoxLayout(content); main.setContentsMargins(24,22,24,16); main.setSpacing(14)
+        header=QHBoxLayout(); self.heading=QLabel('Experiment'); self.heading.setObjectName('heading'); header.addWidget(self.heading); header.addStretch()
+        header.addWidget(QLabel('Device mode')); self.mode=QComboBox(); self.mode.addItem('Simulation','simulation'); self.mode.addItem('Hardware','hardware'); self.fields['mode']=self.mode
+        header.addWidget(self.mode); self.badge=QLabel('● SIMULATION'); self.badge.setObjectName('badge'); header.addWidget(self.badge); main.addLayout(header)
         self.pages=QStackedWidget(); main.addWidget(self.pages); shell.addWidget(content)
-        self.make_dashboard(); self.make_experiment(); self.make_cell(); self.make_robot(); self.make_camera()
+        self.make_dashboard(); self.make_manual(); self.make_settings()
+        for key in ('rack_x','rack_y','rack_z','rack_pitch','rack_columns','cell_x','cell_y','cell_z',
+                    'rinse_x','rinse_y','rinse_z','safe_z','tool_r',
+                    'workspace_x_min','workspace_x_max','workspace_y_min','workspace_y_max',
+                    'workspace_z_min','workspace_z_max','workspace_radius_min','workspace_radius_max'):
+            self.fields[key].valueChanged.connect(lambda:self.fields['calibrated'].setChecked(False))
+        for key in ('rod_diameter','rod_length','shoulder_diameter','tip_below_shoulder',
+                    'cap_thickness','we_clearance','funnel_diameter'):
+            self.fields[key].valueChanged.connect(lambda:self.fields['fixture_verified'].setChecked(False))
+        for key in ('electrodes','first_electrode'):
+            self.fields[key].valueChanged.connect(self.prepare_queue)
+        self.prepare_queue()
+        self.fields['calibrated'].toggled.connect(self.refresh_controls)
+        self.fields['fixture_verified'].toggled.connect(self.refresh_controls)
         self.nav.currentRowChanged.connect(self.change_page); self.nav.setCurrentRow(0)
-        self.timer=QTimer(self); self.timer.timeout.connect(self.plot.update); self.timer.start(100)
-        self.statusBar().showMessage('Ready · All robot and measurement operations are simulated')
+        self.worker=DeviceWorker(ROOT/'runs'); self.worker.state.connect(self.on_devices)
+        self.worker.pose.connect(self.on_pose); self.worker.event.connect(self.on_event)
+        self.worker.point.connect(self.plot.add); self.worker.result.connect(self.on_result)
+        self.worker.completed.connect(self.on_completed); self.worker.finished.connect(self.on_worker_finished); self.worker.start()
+        self.mode.currentIndexChanged.connect(self.change_mode)
+        self.timer=QTimer(self); self.timer.timeout.connect(lambda:self.plot.update() if self.plot.dirty else None); self.timer.start(100)
+        self.refresh_controls(); self.submit('configure')
+        if hasattr(self,'load_error'): self.statusBar().showMessage('Saved settings could not load; using defaults: '+self.load_error)
 
-    def change_page(self,index):
-        self.pages.setCurrentIndex(index); self.heading.setText(self.nav.item(index).text())
-    def page(self,scroll=False):
-        w=QWidget(); layout=QVBoxLayout(w); layout.setSpacing(18)
-        if scroll:
-            wrapper=QScrollArea(); wrapper.setWidgetResizable(True); wrapper.setWidget(w); self.pages.addWidget(wrapper)
-        else: self.pages.addWidget(w)
-        return w,layout
     def note(self,text):
         l=QLabel(text); l.setWordWrap(True); l.setObjectName('note'); return l
-    def field(self,form,key,label,minimum=None,maximum=None):
+    def page(self):
+        w=QWidget(); l=QVBoxLayout(w); l.setContentsMargins(0,0,0,0); l.setSpacing(14); self.pages.addWidget(w); return w,l
+    def change_page(self,index):
+        self.pages.setCurrentIndex(index); self.heading.setText(self.nav.item(index).text())
+    def field(self,form,key,label,minimum=None,maximum=None,decimals=None):
         value=getattr(self.s,key)
-        if isinstance(value,int):
+        if isinstance(value,bool): f=QCheckBox(); f.setChecked(value)
+        elif isinstance(value,int):
             f=QSpinBox(); f.setRange(int(minimum if minimum is not None else 1),int(maximum or 100)); f.setValue(value)
         elif isinstance(value,float):
-            f=QDoubleSpinBox(); f.setDecimals(4 if key in ('step_v','scan_rate') else 2)
-            f.setRange(minimum if minimum is not None else 0.01,maximum or 10000); f.setValue(value)
+            f=QDoubleSpinBox(); f.setDecimals(decimals if decimals is not None else (4 if key in ('step_v','scan_rate') else 2))
+            f.setRange(minimum if minimum is not None else .01,maximum or 10000); f.setValue(value)
             f.setSingleStep(.01 if key.endswith('_v') or key=='scan_rate' else 1)
         else: f=QLineEdit(value)
-        self.fields[key]=f; form.addRow(label,f); f.setMinimumWidth(155)
-        return f
+        f.setMinimumWidth(110); self.fields[key]=f; form.addRow(label,f); return f
     def settings_group(self,title,items):
-        g=QGroupBox(title); form=QFormLayout(g); form.setContentsMargins(18,24,18,18); form.setVerticalSpacing(12)
-        for item in items: self.field(form,*item)
+        g=QGroupBox(title); f=QFormLayout(g); f.setContentsMargins(16,24,16,16); f.setVerticalSpacing(10)
+        for item in items: self.field(f,*item)
         return g
-    def configuration_actions(self,layout):
-        actions=QHBoxLayout(); actions.addWidget(button('Save configuration',self.save,True)); actions.addWidget(button('Load configuration…',self.load)); actions.addStretch(); layout.addLayout(actions)
+    def combo_field(self,form,key,label,options):
+        f=QComboBox()
+        for text,value in options: f.addItem(text,value)
+        f.setCurrentIndex(f.findData(getattr(self.s,key))); self.fields[key]=f; form.addRow(label,f); return f
+    def read_settings(self):
+        values=asdict(self.s)
+        for key,f in self.fields.items():
+            if isinstance(f,QCheckBox): values[key]=f.isChecked()
+            elif isinstance(f,QComboBox): values[key]=f.currentData()
+            elif isinstance(f,(QSpinBox,QDoubleSpinBox)): values[key]=f.value()
+            else: values[key]=f.text()
+        values['end_v']=values['start_v']  # Native PalmSens CV returns to begin potential.
+        return Settings(**values).validate()
+    def apply_settings(self,s):
+        connection_keys=[]
+        if self.device_state.get('robot'):
+            connection_keys.extend(('robot_port','robot_host','robot_ws_port','robot_timeout'))
+        if self.device_state.get('potentiostat'): connection_keys.append('potentiostat_id')
+        for key in connection_keys:
+            field=self.fields[key]
+            value=field.value() if isinstance(field,(QSpinBox,QDoubleSpinBox)) else field.text()
+            if value!=getattr(s,key):
+                raise ValueError('Disconnect devices before loading a different connection profile')
+        for key,f in self.fields.items():
+            if key=='mode': continue
+            f.blockSignals(True)
+            try:
+                if isinstance(f,QCheckBox): f.setChecked(getattr(s,key))
+                elif isinstance(f,QComboBox): f.setCurrentIndex(f.findData(getattr(s,key)))
+                elif isinstance(f,(QSpinBox,QDoubleSpinBox)): f.setValue(getattr(s,key))
+                else: f.setText(getattr(s,key))
+            finally: f.blockSignals(False)
+        s.mode=self.mode.currentData(); self.s=s; self.update_sketch(); self.prepare_queue()
     def save(self):
         try:
             self.s=self.read_settings(); (ROOT/'settings.json').write_text(json.dumps(asdict(self.s),indent=2))
-            self.sketch.s=self.s; self.sketch.update(); self.statusBar().showMessage('Configuration saved')
-        except Exception as exc: QMessageBox.warning(self,'Check configuration',str(exc))
+            self.statusBar().showMessage('Configuration saved'); self.update_sketch()
+        except Exception as exc: QMessageBox.warning(self,'Check settings',str(exc))
     def load(self):
         name,_=QFileDialog.getOpenFileName(self,'Load configuration',str(ROOT),'JSON (*.json)')
-        if not name: return
-        try:
-            s=Settings(**json.loads(Path(name).read_text())).validate()
-            for key,f in self.fields.items():
-                if isinstance(f,QComboBox): f.setCurrentIndex(f.findData(getattr(s,key)))
-                elif isinstance(f,(QSpinBox,QDoubleSpinBox)): f.setValue(getattr(s,key))
-                else: f.setText(getattr(s,key))
-            self.s=s; self.sketch.s=s; self.sketch.update()
-        except Exception as exc: QMessageBox.warning(self,'Cannot load configuration',str(exc))
+        if name:
+            try: self.apply_settings(Settings(**json.loads(Path(name).read_text())).validate())
+            except Exception as exc: QMessageBox.warning(self,'Cannot load configuration',str(exc))
 
     def make_dashboard(self):
-        w,l=self.page(); l.addWidget(self.note('Develop and test the complete sequence here. CV data is synthetic; no robot or potentiostat commands are sent.'))
-        actions=QHBoxLayout(); self.start=button('▶  Start simulated batch',self.start_run,True); self.pause=button('Pause',self.pause_run); self.stop=button('Stop',self.stop_run)
-        self.pause.setEnabled(False); self.stop.setEnabled(False); self.stop.setObjectName('danger')
-        actions.addWidget(self.start); actions.addWidget(self.pause); actions.addWidget(self.stop); actions.addStretch(); actions.addWidget(button('Open run folder',self.open_output)); l.addLayout(actions)
-        top=QHBoxLayout(); a,al=card('Batch progress'); self.state=QLabel('Ready to run'); self.state.setObjectName('metric'); al.addWidget(self.state)
-        self.progress=QProgressBar(); self.progress.setRange(0,self.s.electrodes); self.progress.setValue(0); al.addWidget(self.progress); top.addWidget(a,2)
-        b,bl=card('Sequence'); bl.addWidget(self.note('Pickup → seat → measure → retrieve\nRinse → return to original slot')); top.addWidget(b,3); l.addLayout(top)
-        p,pl=card('Cyclic voltammetry'); self.plot=Plot()
-        plottools=QHBoxLayout(); plottools.addWidget(QLabel('Display')); self.plot_selection=QComboBox(); self.plot_selection.addItem('All electrodes',None)
-        self.plot_selection.currentIndexChanged.connect(self.select_plot); plottools.addWidget(self.plot_selection); plottools.addStretch(); pl.addLayout(plottools)
-        pl.addWidget(self.plot); l.addWidget(p,3)
-        e,el=card('Activity'); self.log=QPlainTextEdit(); self.log.setReadOnly(True); self.log.setMaximumBlockCount(2000); self.log.setMaximumHeight(145); el.addWidget(self.log); l.addWidget(e,1)
-    def make_experiment(self):
-        w,l=self.page(True); l.addWidget(self.note('Potentials are relative to the selected reference electrode. These defaults are for simulation; choose a chemistry-appropriate window before hardware use.'))
-        row=QHBoxLayout(); row.addWidget(self.settings_group('Cyclic voltammetry',[
-            ('start_v','Start potential (V)',-3,3),('vertex1_v','Upper vertex (V)',-3,3),
-            ('vertex2_v','Lower vertex (V)',-3,3),('end_v','End potential (V)',-3,3),
-            ('scan_rate','Scan rate (V/s)',.0001,10),('step_v','Potential step (V)',.0001,1),('cycles','Cycles',1,100),
-            ('reference_label','Reference electrode')]))
-        g=QGroupBox('Batch & measurement'); f=QFormLayout(g); f.setContentsMargins(18,24,18,18)
-        self.field(f,'electrodes','Number of electrodes',1,100); self.field(f,'settle','Settling time (s)',0,600)
-        cr=QComboBox()
-        for v in (.001,.01,.1,1,10,100,1000,10000): cr.addItem(f'{v:g} µA',v)
-        cr.setCurrentIndex(cr.findData(self.s.current_range_ua)); self.fields['current_range_ua']=cr
-        f.addRow('Current range',cr)
-        self.field(f,'simulation_speed','Simulation speed multiplier',.1,100)
-        row.addWidget(g); l.addLayout(row)
-        l.addWidget(self.settings_group('Rinse', [('rinse_dips','Number of dips',1,20),('rinse_dwell','Dwell per dip (s)',0,120)]))
-        self.configuration_actions(l); l.addStretch()
-    def make_cell(self):
-        w,l=self.page(True); l.addWidget(self.note('Nominal 100 mL low-form beaker: body Ø50 × 70 mm. Rim Ø53 mm is an unmeasured placeholder. The cap is a removable, vented fit prototype.'))
-        row=QHBoxLayout(); row.addWidget(self.settings_group('Beaker & cap (mm)',[
-            ('beaker_diameter','Beaker body diameter'),('beaker_height','Beaker height'),('rim_diameter','Measured rim diameter'),
-            ('cap_clearance','Diametral rim clearance'),('cap_wall','Skirt wall thickness'),('cap_thickness','Cap plate thickness'),
-            ('skirt_depth','Skirt depth'),('re_hole','RE opening diameter'),('ce_hole','CE opening diameter'),('port_offset','RE/CE centre offset')]))
-        row.addWidget(self.settings_group('Carrier & WE guide (mm)',[
-            ('rod_diameter','Rod diameter'),('rod_length','Rod length'),('shoulder_diameter','Carrier shoulder diameter'),
-            ('tip_below_shoulder','Tip below shoulder'),('immersion','Target tip immersion'),('we_clearance','WE diametral clearance'),('funnel_diameter','Guide mouth diameter')]))
-        l.addLayout(row); self.sketch=CapSketch(self.s); l.addWidget(self.sketch)
-        actions=QHBoxLayout(); actions.addWidget(button('Update sketch',self.update_sketch)); actions.addWidget(button('Export STL + OpenSCAD…',self.export_cap,True)); actions.addStretch(); l.addLayout(actions)
-        self.geometry_note=self.note('The shoulder sets tip position, not liquid level. Default target: liquid surface 35 mm below shoulder. RE/CE need separate collars/clamps. Dry contact hardware is not included in this print.'); l.addWidget(self.geometry_note)
-        self.configuration_actions(l)
-    def make_robot(self):
-        w,l=self.page(True); l.addWidget(self.note('Coordinates below are simulation placeholders in mm, not calibrated Dobot targets. Hardware movement and gripper control require lab verification.'))
-        l.addWidget(self.settings_group('Rack', [('rack_columns','Rack columns',1,20),('rack_pitch','Slot pitch (mm)'),('rack_x','First slot X (mm)',-400,400),('rack_y','First slot Y (mm)',-400,400),('rack_z','Gripping Z (mm)',-100,300),('safe_z','Travel Z (mm)',-100,300)]))
-        row=QHBoxLayout()
-        for prefix,title in (('cell','Cell'),('rinse','Rinse beaker')):
-            row.addWidget(self.settings_group(title,[(prefix+'_x','X (mm)',-400,400),(prefix+'_y','Y (mm)',-400,400),(prefix+'_z','Gripping / dipping Z (mm)',-100,300)]))
-        l.addLayout(row); l.addWidget(self.settings_group('Connection',[('robot_port','Dobot serial port')]))
-        l.addWidget(self.note('Gripper commissioning: verify installed dobotkit version and supported end-effector calls, then test open/close without an electrode. Reported XYZ alone cannot confirm pickup.'))
-        self.configuration_actions(l); l.addStretch()
-    def make_camera(self):
-        w,l=self.page(); l.addWidget(self.note('Live camera capture is independent of the simulated experiment. Windows uses DirectShow; macOS uses the default OpenCV backend.'))
-        g=QGroupBox('Camera connection'); form=QFormLayout(g); self.field(form,'camera_index','Device index (-1 = search 0–4)',-1,20); l.addWidget(g)
-        actions=QHBoxLayout(); self.connect_camera=button('Connect camera',self.camera_connect,True); self.disconnect_camera=button('Disconnect',self.camera_disconnect); self.disconnect_camera.setEnabled(False)
-        self.snapshot=button('Save snapshot…',self.camera_snapshot); self.snapshot.setEnabled(False)
-        actions.addWidget(self.connect_camera); actions.addWidget(self.disconnect_camera); actions.addWidget(self.snapshot); actions.addStretch(); l.addLayout(actions)
-        self.camera_status=QLabel('Camera disconnected'); l.addWidget(self.camera_status)
-        self.preview=QLabel('Camera preview\nConnect a camera to begin'); self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter); self.preview.setMinimumSize(480,320); self.preview.setObjectName('preview'); l.addWidget(self.preview,1)
-    def read_settings(self):
-        values={}
-        for key,f in self.fields.items():
-            if isinstance(f,QComboBox): values[key]=f.currentData()
-            elif isinstance(f,(QSpinBox,QDoubleSpinBox)): values[key]=f.value()
-            else: values[key]=f.text()
-        return Settings(**values).validate()
-    def update_sketch(self):
+        w,l=self.page()
+        devices=QHBoxLayout(); self.robot_status=QLabel('Robot · simulated'); self.pot_status=QLabel('Potentiostat · simulated')
+        self.robot_status.setMaximumWidth(240); self.pot_status.setMaximumWidth(270); self.pot_status.setWordWrap(True)
+        devices.addWidget(self.robot_status); devices.addWidget(self.pot_status); devices.addStretch()
+        self.connect_robot=button('Connect robot',lambda:self.submit('connect_robot')); self.connect_pot=button('Connect potentiostat',lambda:self.submit('connect_potentiostat'))
+        self.disconnect=button('Disconnect devices',self.disconnect_devices)
+        self.disconnect.setToolTip('Disconnecting the pneumatic gripper turns its pump off; secure any held electrode first.')
+        for b in (self.connect_robot,self.connect_pot,self.disconnect): devices.addWidget(b)
+        l.addLayout(devices)
+        self.mode_note=self.note('Simulation mode · synthetic CV data. Connect a real camera independently if desired.'); l.addWidget(self.mode_note)
+        self.setup_box=QWidget(); setup=QHBoxLayout(self.setup_box); setup.setContentsMargins(0,0,0,0); setup.setSpacing(14)
+        self.batch_group=self.settings_group('Batch', [('run_name','Run name'),('first_electrode','First rack slot',1,100),('electrodes','Electrodes',1,100),('cycles','CV cycles',1,100)])
+        self.cv_group=self.settings_group('Cyclic voltammetry · V vs reference', [('start_v','Start / end (V)',-3,3),('vertex1_v','Upper vertex (V)',-3,3),('vertex2_v','Lower vertex (V)',-3,3),('scan_rate','Scan rate (V/s)',.0001,10)])
+        self.rinse_group=self.settings_group('Conditioning & rinse', [('settle','Settle before CV (s)',0,600),('rinse_dips','Rinse dips',1,20),('rinse_dwell','Dwell per dip (s)',0,120)])
+        for group in (self.batch_group,self.cv_group,self.rinse_group):
+            group.layout().setVerticalSpacing(6)
+            group.setStyleSheet('QSpinBox,QDoubleSpinBox,QLineEdit { padding:4px; }')
+            setup.addWidget(group,1)
+        l.addWidget(self.setup_box)
+        actions=QHBoxLayout(); self.start=button('▶  Start batch',self.start_run,True); self.pause=button('Pause',self.pause_run); self.stop=button('Stop',self.stop_run); self.stop.setObjectName('danger')
+        actions.addWidget(self.start); actions.addWidget(self.pause); actions.addWidget(self.stop); self.state=QLabel('Ready'); self.state.setObjectName('metric'); actions.addWidget(self.state); actions.addStretch()
+        self.progress=QProgressBar(); self.progress.setFixedWidth(180); self.progress.setRange(0,self.s.electrodes); self.progress.setValue(0); actions.addWidget(self.progress)
+        actions.addWidget(button('Run folder',self.open_output)); l.addLayout(actions)
+        self.main_split=QSplitter(Qt.Orientation.Horizontal)
+        graph,gl=card('Electrochemistry'); tools=QHBoxLayout(); tools.addWidget(QLabel('Display')); self.plot_selection=QComboBox(); self.plot_selection.addItem('All electrodes',None)
+        self.plot_selection.currentIndexChanged.connect(self.select_plot); tools.addWidget(self.plot_selection); tools.addStretch(); gl.addLayout(tools)
+        self.plot=Plot(); self.plot.setMinimumWidth(350); self.plot.setMinimumHeight(210); gl.addWidget(self.plot); self.main_split.addWidget(graph)
+        right=QWidget(); rl=QVBoxLayout(right); rl.setContentsMargins(0,0,0,0); rl.setSpacing(10)
+        camera,cl=card('Camera'); self.preview=CameraPreview(); cl.addWidget(self.preview,1)
+        self.camera_status=QLabel('Disconnected'); self.camera_status.setObjectName('note'); self.camera_status.setWordWrap(True); cl.addWidget(self.camera_status)
+        buttons=QHBoxLayout(); self.connect_camera=button('Connect',self.camera_connect); self.disconnect_camera=button('Disconnect',self.camera_disconnect); self.snapshot=button('Snapshot',self.camera_snapshot)
+        for b in (self.connect_camera,self.disconnect_camera,self.snapshot): buttons.addWidget(b)
+        cl.addLayout(buttons); rl.addWidget(camera,3)
+        activity,al=card('Activity'); self.log=QPlainTextEdit(); self.log.setReadOnly(True); self.log.setMaximumBlockCount(2000); self.log.setMinimumHeight(60); al.addWidget(self.log); rl.addWidget(activity,2)
+        self.main_split.addWidget(right); self.main_split.setSizes([720,380]); self.main_split.setStretchFactor(0,2); self.main_split.setStretchFactor(1,1); l.addWidget(self.main_split,1)
+        self.queue_table=QTableWidget(0,3); self.queue_table.setHorizontalHeaderLabels(['Rack slot','Electrode','Status']); self.queue_table.verticalHeader().hide()
+        self.queue_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch); self.queue_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.queue_table.setMaximumHeight(115); self.queue_table.setMinimumHeight(75); l.addWidget(self.queue_table)
+        self.camera_buttons_update()
+    def make_manual(self):
+        w,l=self.page(); l.addWidget(self.note('Manual commands use the selected device mode. Home after connection before hardware movement. Stop halts the queue and requires homing again.'))
+        actions=QHBoxLayout(); self.manual_buttons=[]; self.motion_buttons=[]
+        for text,command in (('Read pose','pose'),('Home robot','home')):
+            b=button(text,lambda checked=False,c=command:self.submit(c)); actions.addWidget(b); self.manual_buttons.append(b)
+        self.manual_stop=button('Stop robot',self.stop_run); self.manual_stop.setObjectName('danger'); actions.addWidget(self.manual_stop); actions.addStretch(); l.addLayout(actions)
+        self.pose_label=QLabel('X —    Y —    Z —    R —'); self.pose_label.setObjectName('metric'); l.addWidget(self.pose_label)
+        row=QHBoxLayout(); jog,jl=card('Jog'); step_row=QHBoxLayout(); step_row.addWidget(QLabel('Step (mm / degrees)')); self.jog_step=QDoubleSpinBox(); self.jog_step.setRange(.1,20); self.jog_step.setValue(1); step_row.addWidget(self.jog_step); step_row.addStretch(); jl.addLayout(step_row)
+        grid=QGridLayout()
+        for axis,name in enumerate('XYZR'):
+            grid.addWidget(QLabel(name),axis,0)
+            for column,sign in ((1,-1),(2,1)):
+                b=button(('−' if sign<0 else '+')+name,lambda checked=False,a=axis,v=sign:self.submit('jog',(a,v*self.jog_step.value())))
+                grid.addWidget(b,axis,column); self.manual_buttons.append(b); self.motion_buttons.append(b)
+        jl.addLayout(grid); row.addWidget(jog,1)
+        target,tl=card('Move to target'); form=QFormLayout(); self.target_fields=[]
+        for axis,value in zip('XYZR',(200,0,80,0)):
+            f=QDoubleSpinBox(); f.setRange(-400,400); f.setValue(value); form.addRow(axis+(' (°)' if axis=='R' else ' (mm)'),f); self.target_fields.append(f)
+        tl.addLayout(form); self.target_move=button('Move to XYZ/R',lambda:self.submit('move',tuple(f.value() for f in self.target_fields)),True); tl.addWidget(self.target_move); self.manual_buttons.append(self.target_move); self.motion_buttons.append(self.target_move); row.addWidget(target,1); l.addLayout(row)
+        bottom=QHBoxLayout(); grip,gl=card('Gripper'); self.grip_label=self.note('Commanded state: open. No pickup sensor is configured.'); gl.addWidget(self.grip_label)
+        for text,closed in (('Open gripper',False),('Close gripper',True)):
+            b=button(text,lambda checked=False,c=closed:self.submit('grip',c)); gl.addWidget(b); self.manual_buttons.append(b)
+        gl.addWidget(self.note('Disconnecting turns the pneumatic pump off.')); bottom.addWidget(grip)
+        teach,tt=card('Teach station'); self.teach_station=QComboBox(); self.teach_station.addItems(['Rack first slot','Cell seating pose','Rinse dipping pose','Travel height'])
+        tt.addWidget(self.teach_station); self.teach_button=button('Use current pose',self.teach_pose); tt.addWidget(self.teach_button)
+        tt.addWidget(self.note('Copies reported coordinates into Settings. Save the profile after checking clearance paths.')); bottom.addWidget(teach); l.addLayout(bottom); l.addStretch()
+    def settings_tab(self,title):
+        scroll=QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        content=QWidget(); layout=QVBoxLayout(content); layout.setSpacing(16); scroll.setWidget(content); self.settings_tabs.addTab(scroll,title); return layout
+    def make_settings(self):
+        w,l=self.page(); actions=QHBoxLayout(); self.save_button=button('Save configuration',self.save,True); self.load_button=button('Load configuration…',self.load)
+        actions.addWidget(self.save_button); actions.addWidget(self.load_button); actions.addStretch(); l.addLayout(actions)
+        self.settings_tabs=QTabWidget(); l.addWidget(self.settings_tabs)
+        devices=self.settings_tab('Devices'); devices.addWidget(self.note('Hardware packages: requirements-hardware.txt. Start DobotLink on Windows. PalmSens requires its .NET runtime and USB drivers. Connection changes take effect after disconnect/reconnect.'))
+        devices.addWidget(self.settings_group('DobotLink connection', [('robot_port','Robot port (auto / COM…)'),('robot_host','DobotLink host'),('robot_ws_port','WebSocket port',1,65535),('robot_timeout','RPC timeout (s)',1,30)]))
+        devices.addWidget(self.settings_group('PalmSens & camera', [('potentiostat_id','Potentiostat ID (blank = one device)'),('sdk_timeout','SDK timeout margin (s)',5,120),('camera_index','Camera index (-1 = auto)',-1,20)])); devices.addStretch()
+        protocol=self.settings_tab('Measurement defaults'); protocol.addWidget(self.settings_group('Acquisition', [('step_v','Potential step (V)',.0001,1),('reference_label','Reference electrode'),('simulation_speed','Simulation multiplier',.1,100)]))
+        acquisition=QGroupBox('Instrument defaults'); f=QFormLayout(acquisition)
+        self.combo_field(f,'current_range_ua','Fixed current range',[(f'{v:g} µA',v) for v in (.001,.01,.1,1,10,100,1000,10000)])
+        self.combo_field(f,'power_frequency','Mains frequency',[('50 Hz',50),('60 Hz',60)]); protocol.addWidget(acquisition)
+        protocol.addWidget(self.note('Native PalmSens CV returns to its start potential. Hardware ignores the simulation multiplier. Current and potential values are recorded from SDK data; CSV time is nominal CV sample time.')); protocol.addStretch()
+        robot=self.settings_tab('Robot calibration'); row=QHBoxLayout()
+        row.addWidget(self.settings_group('Rack (mm)', [('rack_columns','Columns',1,20),('rack_pitch','Slot pitch'),('rack_x','First slot X',-400,400),('rack_y','First slot Y',-400,400),('rack_z','Gripping Z',-100,300),('safe_z','Travel Z',-100,300)]))
+        row.addWidget(self.settings_group('Stations (mm)', [('cell_x','Cell X',-400,400),('cell_y','Cell Y',-400,400),('cell_z','Cell seating Z',-100,300),('rinse_x','Rinse X',-400,400),('rinse_y','Rinse Y',-400,400),('rinse_z','Rinse dipping Z',-100,300),('tool_r','Carrier rotation (°)',-90,90)])); robot.addLayout(row)
+        robot.addWidget(self.settings_group('Motion', [('robot_velocity','Velocity setting',.1,100),('robot_acceleration','Acceleration setting',.1,100),('motion_timeout','Motion timeout (s)',1,120),('home_timeout','Homing timeout (s)',20,180),('position_tolerance','XYZ tolerance (mm)',.05,5),('rotation_tolerance','R tolerance (°)',.1,5),('grip_dwell','Gripper dwell (s)',.1,10)]))
+        robot.addWidget(self.settings_group('Hardware batch readiness', [('calibrated','Station poses and paths calibrated'),('fixture_verified','Gripper, seating and dry contact verified')]))
+        robot.addWidget(self.note('Default coordinates and workspace bounds are placeholders. Position feedback verifies arm pose, not successful pickup or electrical contact. No automatic retry is enabled.')); robot.addStretch()
+        bounds=self.settings_tab('Workspace'); bounds.addWidget(self.note('These bounds constrain commanded endpoints. They do not model obstacles, joint limits or collision-free paths. Validate the complete travel route in the lab.'))
+        bounds.addWidget(self.settings_group('Cartesian bounds (mm)', [(f'workspace_{axis}_{end}',f'{axis.upper()} {end}',-400,400) for axis in 'xyz' for end in ('min','max')]))
+        bounds.addWidget(self.settings_group('Radial bounds from base (mm)', [('workspace_radius_min','Minimum radius',0,400),('workspace_radius_max','Maximum radius',1,400)])); bounds.addStretch()
+        cell=self.settings_tab('Cell & carrier'); row=QHBoxLayout()
+        row.addWidget(self.settings_group('Beaker & cap (mm)', [('beaker_diameter','Body diameter'),('beaker_height','Beaker height'),('rim_diameter','Measured rim diameter'),('cap_clearance','Diametral clearance'),('cap_wall','Skirt wall'),('cap_thickness','Plate thickness'),('skirt_depth','Skirt depth'),('re_hole','RE opening'),('ce_hole','CE opening'),('port_offset','RE/CE offset')]))
+        row.addWidget(self.settings_group('Carrier & guide (mm)', [('rod_diameter','Rod diameter'),('rod_length','Rod length'),('shoulder_diameter','Shoulder diameter'),('tip_below_shoulder','Tip below shoulder'),('immersion','Target immersion'),('we_clearance','WE clearance'),('funnel_diameter','Guide mouth')]))
+        cell.addLayout(row); self.sketch=CapSketch(self.s); cell.addWidget(self.sketch)
+        ca=QHBoxLayout(); ca.addWidget(button('Update sketch',self.update_sketch)); ca.addWidget(button('Export STL + OpenSCAD…',self.export_cap,True)); ca.addStretch(); cell.addLayout(ca)
+        cell.addWidget(self.note('Nominal 100 mL beaker: Ø50 × 70 mm. Measure its rim before printing. The cap is vented; RE/CE collars, dry contacts and custom gripper remain separate parts.'))
+
+    def submit(self,command,payload=None):
+        if self.busy or self._close_pending: return
+        try: s=self.read_settings()
+        except Exception as exc: QMessageBox.warning(self,'Check settings',str(exc)); return
+        self.busy=True; self.refresh_controls(); self.statusBar().showMessage(command.replace('_',' ').capitalize()+'…')
+        self.worker.submit(command,s,payload)
+    def disconnect_devices(self):
+        if self.mode.currentData()=='hardware' and self.device_state.get('holding'):
+            self.statusBar().showMessage('Secure the electrode and open the gripper before disconnecting; disconnect turns off its pump.')
+            return
+        self.submit('disconnect')
+    def change_mode(self):
+        self.current_pose=None; self.device_state={'robot':False,'potentiostat':False,'homed':False,'holding':False}
+        hardware=self.mode.currentData()=='hardware'; self.plot.synthetic=not hardware; self.plot.clear()
+        self.badge.setText('● HARDWARE' if hardware else '● SIMULATION'); self.sidebar_status.setText('Hardware\nPhysical devices selected' if hardware else 'Simulation\nNo physical commands')
+        self.mode_note.setText('Hardware mode · connect devices, home the robot, and verify calibration before a batch. Stop is a software queue stop, not a physical emergency stop.' if hardware else 'Simulation mode · synthetic CV data. Connect a real camera independently if desired.')
+        self.submit('configure')
+    def on_devices(self,state):
+        self.device_state=state
+        hardware=self.mode.currentData()=='hardware'
+        self.robot_status.setText('Robot · '+('connected' if state['robot'] else 'disconnected')+(' · homed' if state['homed'] else ''))
+        self.pot_status.setText('Potentiostat · '+state.get('potentiostat_name','Disconnected'))
+        self.grip_label.setText('Commanded state: '+('closed / electrode may be held' if state['holding'] else 'open')+'. No pickup sensor is configured.')
+        self.refresh_controls()
+    def refresh_controls(self):
+        idle=not self.busy and not self._close_pending; hardware=self.mode.currentData()=='hardware'; d=self.device_state
+        self.mode.setEnabled(idle and not d.get('robot') and not d.get('potentiostat') or idle and self.mode.currentData()=='simulation')
+        # Switching modes owns teardown in the worker; hardware users disconnect first.
+        ready=not hardware or (d.get('homed',False) and self.fields['calibrated'].isChecked() and self.fields['fixture_verified'].isChecked())
+        self.start.setEnabled(idle and ready and not d.get('holding',False) and d.get('robot',False) and d.get('potentiostat',False))
+        self.start.setToolTip('Hardware: connect both devices, home the robot, and verify calibration and the fixture in Settings.')
+        self.pause.setEnabled(self.running_batch and not hardware and not self._close_pending)
+        self.stop.setEnabled(self.busy); self.manual_stop.setEnabled(self.busy or idle and d.get('robot',False))
+        self.connect_robot.setEnabled(idle and not d.get('robot',False)); self.connect_pot.setEnabled(idle and not d.get('potentiostat',False)); self.disconnect.setEnabled(idle and (d.get('robot',False) or d.get('potentiostat',False)))
+        for key in ('robot_port','robot_host','robot_ws_port','robot_timeout'):
+            self.fields[key].setEnabled(idle and not d.get('robot',False))
+        self.fields['potentiostat_id'].setEnabled(idle and not d.get('potentiostat',False))
+        self.setup_box.setEnabled(idle); self.settings_tabs.setEnabled(idle); self.save_button.setEnabled(idle); self.load_button.setEnabled(idle)
+        for b in self.manual_buttons: b.setEnabled(idle and d.get('robot',False))
+        for b in self.motion_buttons: b.setEnabled(idle and d.get('robot',False) and (not hardware or d.get('homed',False)))
+        self.teach_button.setEnabled(idle and self.current_pose is not None and d.get('robot',False) and (not hardware or d.get('homed',False)))
+    def prepare_queue(self):
+        if self.running_batch: return
+        first=self.fields['first_electrode'].value(); count=self.fields['electrodes'].value()
+        self.queue_table.setRowCount(count)
+        for row,index in enumerate(range(first,first+count)):
+            for col,text in enumerate((str(index),f'WE {index:02d}','Queued')):
+                self.queue_table.setItem(row,col,QTableWidgetItem(text))
+    def start_run(self):
+        if self.busy: return
         try:
-            self.sketch.s=self.read_settings(); self.sketch.update()
-            s=self.sketch.s
-            self.geometry_note.setText(f'Target liquid surface: {s.tip_below_shoulder-s.immersion:.1f} mm below shoulder. RE/CE need separate collars/clamps. Dry contact hardware is not included in this print.')
+            s=self.read_settings().validate_batch()
+            if s.mode=='hardware' and not self.device_state.get('homed'): raise ValueError('Home the robot on Manual robot before a hardware batch')
+            if self.device_state.get('holding'): raise ValueError('Release or secure the currently held electrode before starting a new batch')
+        except Exception as exc: QMessageBox.warning(self,'Batch not ready',str(exc)); return
+        self.s=s; self.plot.clear(); self.plot.synthetic=s.mode=='simulation'; self.plot_selection.clear(); self.plot_selection.addItem('All electrodes',None)
+        self.queue_table.setRowCount(s.electrodes)
+        for row,index in enumerate(range(s.first_electrode,s.first_electrode+s.electrodes)):
+            self.plot_selection.addItem(f'Electrode {index}',index)
+            for col,text in enumerate((str(index),f'WE {index:02d}','Queued')): self.queue_table.setItem(row,col,QTableWidgetItem(text))
+        self.plot.update(); self.log.clear(); self.progress.setRange(0,s.electrodes); self.progress.setValue(0)
+        self.running_batch=True; self.paused=False; self.pause.setText('Pause'); self.state.setText('Starting…'); self.submit('run')
+    def select_plot(self):
+        if hasattr(self,'plot'): self.plot.selected=self.plot_selection.currentData(); self.plot.update()
+    def on_event(self,event):
+        index=event['electrode']; self.state.setText(f"WE {index} · {event['state'].capitalize()}" if index else event['state'].capitalize())
+        self.log.appendPlainText(f"{event['time'][11:19]}  {event['detail']}")
+        if index is not None:
+            row=index-self.s.first_electrode
+            if 0<=row<self.queue_table.rowCount(): self.queue_table.setItem(row,2,QTableWidgetItem(event['state'].capitalize()))
+        if event['state']=='done': self.progress.setValue(index-self.s.first_electrode+1)
+    def on_result(self,folder,status):
+        self.output=Path(folder) if folder else None; self.state.setText(status.capitalize()); self.statusBar().showMessage(f'Run {status} · {folder}')
+    def on_completed(self,command,ok,message):
+        if command=='shutdown': self.statusBar().showMessage(message); return
+        self.busy=False
+        if command=='run': self.running_batch=False
+        if not ok:
+            self.log.appendPlainText(message); self.statusBar().showMessage(message)
+            if command=='run': self.state.setText('Stopped' if message=='Stopped' else 'Failed')
+            if not self._close_pending and message!='Stopped': QMessageBox.warning(self,'Device operation stopped',message)
+        elif command!='run': self.statusBar().showMessage(command.replace('_',' ').capitalize()+' completed')
+        self.refresh_controls()
+    def on_pose(self,pose):
+        self.current_pose=dict(pose); self.pose_label.setText('    '.join(f'{k.upper()} {pose[k]:.2f}' for k in ('x','y','z','r')))
+    def pause_run(self):
+        if not self.running_batch or self.mode.currentData()!='simulation': return
+        self.paused=not self.paused
+        self.worker.control.resume.clear() if self.paused else self.worker.control.resume.set()
+        self.pause.setText('Resume' if self.paused else 'Pause'); self.state.setText('Paused' if self.paused else 'Resuming…')
+    def stop_run(self):
+        if self.busy:
+            self.worker.cancel(); self.pause.setEnabled(False); self.stop.setEnabled(False); self.state.setText('Stopping…')
+        else: self.submit('stop')
+    def teach_pose(self):
+        if self.current_pose is None: return
+        station=self.teach_station.currentIndex()
+        if station==3: self.fields['safe_z'].setValue(self.current_pose['z'])
+        else:
+            prefix=('rack','cell','rinse')[station]
+            for axis in 'xyz': self.fields[f'{prefix}_{axis}'].setValue(self.current_pose[axis])
+            self.fields['tool_r'].setValue(self.current_pose['r'])
+        self.fields['calibrated'].setChecked(False); self.statusBar().showMessage('Pose copied to Settings; verify the travel route before marking calibrated')
+    def open_output(self):
+        path=self.output or ROOT/'runs'; path.mkdir(exist_ok=True); QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+    def camera_buttons_update(self):
+        active=self.camera is not None and self.camera.isRunning()
+        self.connect_camera.setEnabled(not active and not self._close_pending); self.disconnect_camera.setEnabled(active and not self._close_pending); self.snapshot.setEnabled(self.last_frame is not None)
+    def camera_connect(self):
+        if self.camera and self.camera.isRunning(): return
+        self.last_frame=None; self.camera_status.setText('Searching…')
+        self.camera=CameraWorker(self.fields['camera_index'].value()); self.camera.frame.connect(self.on_frame); self.camera.status.connect(self.camera_status.setText)
+        self.camera.finished.connect(self.camera_finished); self.camera.start(); self.camera_buttons_update()
+    def camera_disconnect(self):
+        if self.camera: self.camera.requestInterruption()
+        self.disconnect_camera.setEnabled(False); self.camera_status.setText('Disconnecting…')
+    def camera_finished(self):
+        self.camera_buttons_update()
+        if self.camera_status.text()=='Disconnecting…': self.camera_status.setText('Disconnected')
+        if self._close_pending: self.close()
+    def on_frame(self,image):
+        self.last_frame=image; self.snapshot.setEnabled(True); self.update_preview()
+    def update_preview(self):
+        if self.last_frame is not None:
+            self.preview.set_frame(self.last_frame)
+    def resizeEvent(self,event):
+        super().resizeEvent(event)
+        if hasattr(self,'preview'): self.update_preview()
+    def camera_snapshot(self):
+        if self.last_frame is None: return
+        (ROOT/'runs').mkdir(exist_ok=True)
+        name,_=QFileDialog.getSaveFileName(self,'Save camera snapshot',str(ROOT/'runs'/'camera.png'),'PNG (*.png)')
+        if name and not self.last_frame.save(name): QMessageBox.warning(self,'Snapshot failed','Could not write image')
+    def update_sketch(self):
+        try: self.sketch.s=self.read_settings(); self.sketch.update()
         except Exception as exc: QMessageBox.warning(self,'Check geometry',str(exc))
     def export_cap(self):
         try: s=self.read_settings()
@@ -235,101 +371,24 @@ class Window(QMainWindow):
         if folder:
             try:
                 from .cad import export_cap
-                path=export_cap(s,folder); Path(folder,'cap_settings.json').write_text(json.dumps(asdict(s),indent=2))
-                QMessageBox.information(self,'Cap exported',f'Closed-solid STL and editable OpenSCAD saved to:\n{path.parent}\n\nMeasure the rim and verify fit before lab use.')
+                path=export_cap(s,folder); Path(folder,'cap_settings.json').write_text(json.dumps(asdict(s),indent=2)); self.statusBar().showMessage(f'Cap exported to {path}')
             except Exception as exc: QMessageBox.warning(self,'Export failed',str(exc))
-    def start_run(self):
-        if self.worker and self.worker.isRunning(): return
-        try: s=self.read_settings()
-        except Exception as exc: QMessageBox.warning(self,'Check configuration',str(exc)); return
-        self.s=s; self.plot.data={}; self.plot_selection.clear(); self.plot_selection.addItem('All electrodes',None)
-        for index in range(1,s.electrodes+1): self.plot_selection.addItem(f'Electrode {index}',index)
-        self.plot.update(); self.log.clear(); self.progress.setRange(0,s.electrodes); self.progress.setValue(0)
-        self.start.setEnabled(False); self.pause.setEnabled(True); self.stop.setEnabled(True); self.paused=False; self.pause.setText('Pause')
-        for index in (1,2,3): self.pages.widget(index).setEnabled(False)
-        self.worker=RunWorker(s); self.worker.event.connect(self.on_event); self.worker.point.connect(self.plot.add); self.worker.result.connect(self.on_result)
-        self.worker.finished.connect(self.on_finished); self.worker.start()
-    def select_plot(self):
-        self.plot.selected=self.plot_selection.currentData(); self.plot.update()
-    def on_event(self,event):
-        self.state.setText(f"Electrode {event['electrode']} · {event['state'].capitalize()}")
-        self.log.appendPlainText(f"{event['time'][11:19]}  {event['detail']}")
-        if event['state']=='done': self.progress.setValue(event['electrode'])
-    def on_result(self,folder,status):
-        self.output=Path(folder) if folder else None; self.state.setText(status.capitalize()); self.statusBar().showMessage(f'Run {status} · {folder}')
-    def on_finished(self):
-        self.start.setEnabled(True); self.pause.setEnabled(False); self.stop.setEnabled(False)
-        for index in (1,2,3): self.pages.widget(index).setEnabled(True)
+    def on_worker_finished(self):
         if self._close_pending: self.close()
-    def pause_run(self):
-        if not self.worker: return
-        self.paused=not self.paused
-        self.worker.control.resume.clear() if self.paused else self.worker.control.resume.set()
-        self.pause.setText('Resume' if self.paused else 'Pause'); self.state.setText('Paused' if self.paused else 'Resuming…')
-    def stop_run(self):
-        if self.worker:
-            self.worker.control.cancel.set(); self.worker.control.resume.set(); self.pause.setEnabled(False); self.stop.setEnabled(False); self.state.setText('Stopping…')
-    def open_output(self):
-        path=self.output or ROOT/'runs'; path.mkdir(exist_ok=True); QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
-    def camera_connect(self):
-        if self.camera and self.camera.isRunning(): return
-        self.last_frame=None; self.snapshot.setEnabled(False); self.camera_status.setText('Searching for camera…')
-        self.camera=CameraWorker(self.fields['camera_index'].value()); self.camera.frame.connect(self.on_frame); self.camera.status.connect(self.camera_status.setText)
-        self.camera.finished.connect(self.camera_finished); self.camera.start(); self.connect_camera.setEnabled(False); self.disconnect_camera.setEnabled(True)
-    def camera_disconnect(self):
-        if self.camera: self.camera.requestInterruption()
-        self.disconnect_camera.setEnabled(False); self.camera_status.setText('Disconnecting…')
-    def camera_finished(self):
-        self.connect_camera.setEnabled(True); self.disconnect_camera.setEnabled(False)
-        if self.camera_status.text()=='Disconnecting…': self.camera_status.setText('Camera disconnected')
-        if self._close_pending: self.close()
-    def on_frame(self,image):
-        self.last_frame=image; self.snapshot.setEnabled(True)
-        self.preview.setPixmap(QPixmap.fromImage(image).scaled(self.preview.size(),Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.SmoothTransformation))
-    def camera_snapshot(self):
-        if self.last_frame is None: return
-        name,_=QFileDialog.getSaveFileName(self,'Save camera snapshot',str(ROOT/'runs'/'camera.png'),'PNG (*.png)')
-        if name and not self.last_frame.save(name): QMessageBox.warning(self,'Snapshot failed','Could not write image')
     def closeEvent(self,event):
-        running=self.worker and self.worker.isRunning(); camera_running=self.camera and self.camera.isRunning()
-        if running or camera_running:
+        if self.mode.currentData()=='hardware' and not self._close_pending:
+            if self.busy:
+                self.stop_run(); self.statusBar().showMessage('Stop requested. Recover any electrode before closing the app.'); event.ignore(); return
+            if self.device_state.get('holding'):
+                self.statusBar().showMessage('Secure the electrode and open the gripper before closing; closing turns off its pump.'); event.ignore(); return
+        device_running=self.worker.isRunning(); camera_running=self.camera is not None and self.camera.isRunning()
+        if device_running or camera_running:
             self._close_pending=True
-            if running: self.stop_run()
+            if not self._shutdown_sent:
+                self._shutdown_sent=True; self.worker.shutdown()
             if camera_running: self.camera_disconnect()
-            self.statusBar().showMessage('Stopping background workers before closing…'); event.ignore()
+            self.refresh_controls(); self.statusBar().showMessage('Stopping and disconnecting devices before closing…'); event.ignore()
         else: event.accept()
-
-STYLE='''
-QWidget { font-family: "Inter", "Segoe UI", "Helvetica Neue"; font-size: 13px; color:#243c4b; background:#f7fafc; }
-QWidget#sidebar { background:#142f3d; }
-#sidebar QLabel { background:transparent; color:#b0c6d1; }
-#brand { font-size:29px; font-weight:700; color:white; }
-#navsub { font-size:10px; line-height:150%; }
-QListWidget { background:transparent; border:none; outline:none; color:#b8ced8; }
-QListWidget::item { padding:15px 10px; margin:3px 0; border-radius:7px; }
-QListWidget::item:selected { background:#265060; color:white; }
-#heading { font-size:26px; font-weight:650; }
-#badge { color:#087c70; background:#ddf1eb; border-radius:12px; padding:8px 13px; font-size:11px; font-weight:700; }
-QGroupBox { background:white; border:1px solid #dee7ed; border-radius:10px; font-weight:600; margin-top:12px; }
-QGroupBox::title { subcontrol-origin:margin; left:18px; padding:0 5px; }
-QGroupBox QWidget { background:white; }
-#note { color:#647988; font-weight:400; line-height:150%; }
-#metric { font-size:21px; font-weight:600; }
-QPushButton { background:white; border:1px solid #cfdae2; border-radius:7px; padding:10px 17px; font-weight:600; }
-QPushButton:hover { background:#eaf4f3; border-color:#69b0a7; }
-QPushButton#primary { background:#0d8a7d; color:white; border-color:#0d8a7d; }
-QPushButton#primary:hover { background:#08776c; }
-QPushButton#danger { color:#b54747; }
-QPushButton:disabled { background:#eef2f5; color:#a4b1ba; border-color:#e0e6eb; }
-QSpinBox,QDoubleSpinBox,QLineEdit,QComboBox { border:1px solid #cad7df; border-radius:5px; padding:7px; background:white; selection-background-color:#0d8a7d; }
-QSpinBox:focus,QDoubleSpinBox:focus,QLineEdit:focus,QComboBox:focus { border:1px solid #0d8a7d; }
-QProgressBar { border:none; background:#e9eff3; border-radius:5px; height:20px; text-align:center; }
-QProgressBar::chunk { background:#0d9b8d; border-radius:5px; }
-QPlainTextEdit { border:none; color:#647988; font-family:"Menlo","Consolas"; font-size:11px; }
-QScrollArea { border:none; }
-#preview { background:#152f3c; color:#a8bec9; border-radius:10px; }
-QStatusBar { color:#647988; background:#edf3f6; }
-'''
 
 def main():
     app=QApplication(sys.argv); app.setStyle('Fusion'); app.setStyleSheet(STYLE)

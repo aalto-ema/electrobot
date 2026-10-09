@@ -3,6 +3,33 @@ import math
 
 @dataclass
 class Settings:
+    mode: str = 'simulation'
+    run_name: str = 'Electrode screening'
+    first_electrode: int = 1
+    robot_host: str = 'localhost'
+    robot_ws_port: int = 9090
+    robot_velocity: float = 20.0
+    robot_acceleration: float = 20.0
+    robot_timeout: float = 5.0
+    motion_timeout: float = 30.0
+    home_timeout: float = 60.0
+    position_tolerance: float = 1.0
+    rotation_tolerance: float = 1.0
+    tool_r: float = 0.0
+    grip_dwell: float = 0.7
+    workspace_x_min: float = -300.0
+    workspace_x_max: float = 300.0
+    workspace_y_min: float = -300.0
+    workspace_y_max: float = 300.0
+    workspace_z_min: float = -50.0
+    workspace_z_max: float = 150.0
+    workspace_radius_min: float = 120.0
+    workspace_radius_max: float = 300.0
+    calibrated: bool = False
+    fixture_verified: bool = False
+    potentiostat_id: str = ''
+    sdk_timeout: float = 20.0
+    power_frequency: int = 50
     electrodes: int = 3
     rack_columns: int = 5
     rack_pitch: float = 22.0
@@ -50,6 +77,26 @@ class Settings:
     reference_label: str = 'Ag/AgCl (confirm electrolyte)'
 
     def validate(self):
+        if self.mode not in ('simulation','hardware'):
+            raise ValueError('Mode must be simulation or hardware')
+        if not 1 <= self.first_electrode <= 100 or self.first_electrode+self.electrodes-1 > 100:
+            raise ValueError('Rack slot range must be within 1–100')
+        if not 1 <= self.robot_ws_port <= 65535 or self.power_frequency not in (50,60):
+            raise ValueError('Invalid DobotLink port or mains frequency')
+        for key in ('robot_velocity','robot_acceleration'):
+            if not 0 < getattr(self,key) <= 100:
+                raise ValueError(f'{key} must be between 0 and 100')
+        for key in ('robot_timeout','motion_timeout','home_timeout','position_tolerance',
+                    'rotation_tolerance','grip_dwell','sdk_timeout'):
+            if getattr(self,key) <= 0:
+                raise ValueError(f'{key} must be positive')
+        for axis in 'xyz':
+            if getattr(self,f'workspace_{axis}_min') >= getattr(self,f'workspace_{axis}_max'):
+                raise ValueError(f'Invalid workspace {axis.upper()} bounds')
+        if not 0 <= self.workspace_radius_min < self.workspace_radius_max or not -90 <= self.tool_r <= 90:
+            raise ValueError('Invalid radial bounds or tool rotation')
+        if self.mode=='hardware' and not math.isclose(self.end_v,self.start_v,abs_tol=1e-9):
+            raise ValueError('PalmSens CV ends at its start potential; end must equal start')
         for key, value in asdict(self).items():
             if isinstance(value, (int, float)) and not math.isfinite(value):
                 raise ValueError(f'{key} must be finite')
@@ -101,6 +148,34 @@ class Settings:
             raise ValueError('Camera index must be -1 (auto) or 0–20')
         if len(self.potential_points()) > 200000:
             raise ValueError('Protocol exceeds 200,000 points')
+        return self
+
+    def rack_pose(self,index):
+        return (self.rack_x+((index-1)%self.rack_columns)*self.rack_pitch,
+                self.rack_y+((index-1)//self.rack_columns)*self.rack_pitch,self.rack_z)
+
+    def validate_pose(self,pose):
+        if len(pose) not in (3,4) or not all(math.isfinite(v) for v in pose):
+            raise ValueError('Pose must have finite XYZ and optional R values')
+        for axis,value in zip('xyz',pose):
+            if not getattr(self,f'workspace_{axis}_min') <= value <= getattr(self,f'workspace_{axis}_max'):
+                raise ValueError(f'{axis.upper()} target {value:g} lies outside configured workspace')
+        radius=math.hypot(pose[0],pose[1])
+        if not self.workspace_radius_min <= radius <= self.workspace_radius_max:
+            raise ValueError(f'Target radius {radius:.1f} mm lies outside configured workspace')
+        if len(pose)==4 and not -90 <= pose[3] <= 90:
+            raise ValueError('Tool rotation must be within ±90 degrees')
+        return pose
+
+    def validate_batch(self):
+        self.validate()
+        if self.mode=='hardware':
+            if not self.calibrated or not self.fixture_verified:
+                raise ValueError('Mark calibration and gripper/contact fixture as verified in Settings before a hardware batch')
+            poses=[self.rack_pose(i) for i in range(self.first_electrode,self.first_electrode+self.electrodes)]
+            poses.extend(((self.cell_x,self.cell_y,self.cell_z),(self.rinse_x,self.rinse_y,self.rinse_z)))
+            for pose in poses:
+                self.validate_pose(pose); self.validate_pose((pose[0],pose[1],self.safe_z,self.tool_r))
         return self
 
     def potential_points(self):

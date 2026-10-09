@@ -1,34 +1,65 @@
-import sys
-import time
+import sys,time,tempfile,json
 from pathlib import Path
+from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parent.parent))
-from PySide6.QtWidgets import QApplication
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication,QMessageBox
+from PySide6.QtGui import QImage,QColor
 from electrobot.app import Window,STYLE
+warnings=[]
+QMessageBox.warning=lambda *args: warnings.append(args[-1])
 app=QApplication([]); app.setStyle('Fusion'); app.setStyleSheet(STYLE)
-w=Window(); w.show(); app.processEvents()
+w=Window(); w.show()
+def idle(timeout=10):
+    deadline=time.monotonic()+timeout
+    while w.busy and time.monotonic()<deadline:
+        app.processEvents(); time.sleep(.01)
+    app.processEvents(); assert not w.busy,'Device command did not complete'
+idle()
+assert 'pypalmsens' not in sys.modules and 'dobotkit' not in sys.modules
 assert w.read_settings().electrodes==3
-for i in range(5):
-    w.nav.setCurrentRow(i); app.processEvents()
-    w.grab().save(str(Path('cad')/f'ui-{i}.png'))
-w.nav.setCurrentRow(0)
-w.fields['electrodes'].setValue(1); w.fields['simulation_speed'].setValue(100)
-w.fields['cycles'].setValue(1); w.start_run()
-deadline=time.monotonic()+10
-while w.worker.isRunning() and time.monotonic()<deadline:
-    app.processEvents(); time.sleep(.01)
-app.processEvents()
-assert not w.worker.isRunning(), 'Run did not complete'
-assert w.progress.value()==1
-assert w.state.text()=='Completed',w.state.text()
-assert w.start.isEnabled()
-assert len(w.plot.data[1])>0
+assert w.fields['scan_rate'].isVisible()
+assert w.preview.isVisible()
+assert not w.fields['rack_pitch'].isVisible()
+for i in range(3):
+    w.nav.setCurrentRow(i); app.processEvents(); w.grab().save(str(Path('cad')/f'ui-{i}.png'))
+for index in range(w.settings_tabs.count()):
+    w.settings_tabs.setCurrentIndex(index); app.processEvents()
+    w.grab().save(f'cad/ui-settings-{index}.png')
+w.nav.setCurrentRow(1); w.submit('jog',(0,1)); idle(); assert w.current_pose['x']==201
+w.submit('grip',True); idle(); assert w.device_state['holding']
+w.submit('grip',False); idle(); assert not w.device_state['holding']
+w.submit('move',(201,-65,15,0)); idle()
+w.teach_station.setCurrentIndex(0); w.teach_pose(); assert w.fields['rack_x'].value()==201
+assert not w.fields['calibrated'].isChecked()
+w.nav.setCurrentRow(0); w.fields['electrodes'].setValue(3); w.fields['first_electrode'].setValue(2)
+w.fields['simulation_speed'].setValue(100); w.fields['cycles'].setValue(1)
+image=QImage(640,360,QImage.Format.Format_RGB32); image.fill(QColor('#253f4b')); w.on_frame(image); w.camera_status.setText('Test image · camera disconnected')
+w.start_run(); idle()
+assert w.progress.value()==3 and w.state.text()=='Completed'
+assert w.start.isEnabled() and len(w.plot.data[2])>0 and set(w.plot.data)=={2,3,4}
+assert w.queue_table.item(2,2).text()=='Done'
 w.grab().save('cad/ui-run.png')
-w.fields['simulation_speed'].setValue(1); w.start_run(); w.pause_run()
-assert w.paused
-w.stop_run(); deadline=time.monotonic()+3
+w.resize(1280,900); app.processEvents(); w.grab().save('cad/ui-compact.png')
+assert w.width()<=1280 and w.height()<=900,(w.width(),w.height())
+w.resize(1440,960); app.processEvents()
+w.fields['simulation_speed'].setValue(1); w.start_run(); w.pause_run(); assert w.paused
+w.stop_run(); idle(); assert w.state.text()=='Stopped'
+with tempfile.TemporaryDirectory() as d:
+    path=Path(d)/'settings.json'
+    import electrobot.app as module
+    with patch.object(module,'ROOT',Path(d)): w.save()
+    config=json.loads(path.read_text()); assert config['first_electrode']==2
+    w.fields['electrodes'].setValue(1)
+    with patch.object(module.QFileDialog,'getOpenFileName',return_value=(str(path),'JSON')): w.load()
+    assert w.fields['electrodes'].value()==3
+# Hardware mode must not implicitly connect, home or move either device.
+w.mode.setCurrentIndex(1); idle(); assert not w.device_state['robot'] and not w.device_state['potentiostat']
+assert not w.start.isEnabled() and not w.device_state['homed']
+w.grab().save('cad/ui-hardware.png')
+w.mode.setCurrentIndex(0); idle()
+w.close(); deadline=time.monotonic()+3
 while w.worker.isRunning() and time.monotonic()<deadline:
     app.processEvents(); time.sleep(.01)
-app.processEvents(); assert not w.worker.isRunning(); assert w.state.text()=='Stopped'
-w.close(); app.processEvents()
-print('UI settings, all five pages, batch completion, live plot, stop while paused and thread shutdown passed')
+app.processEvents(); assert not w.worker.isRunning()
+assert not warnings,warnings
+print('UI: layout, shared camera, manual jog/grip/teach, batch, pause/stop, profile roundtrip, mode isolation and shutdown passed')

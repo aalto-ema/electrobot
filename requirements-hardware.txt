@@ -1,0 +1,3 @@
+-r requirements.txt
+dobotkit==0.2.0
+pypalmsens==2.2.0

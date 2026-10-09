@@ -1,10 +1,12 @@
 # Electrobot
 
-PySide6 desktop prototype for a Dobot Magician Lite + MagicBox and PalmSens EmStat4S LR electrochemistry platform. Runs on macOS and Windows. Robot and potentiostat operations currently run **only in simulation**. Camera capture is real and optional.
+PySide6 desktop workbench for a Dobot Magician Lite + MagicBox and PalmSens EmStat4S LR electrochemistry platform. Choose **Simulation** for development on macOS or **Hardware** for lab commissioning. The real drivers are implemented against `dobotkit 0.2.0` and `pypalmsens 2.2.0`; they have been tested with device doubles, not yet on the physical lab setup.
 
-## Start
+![Experiment workspace](cad/ui-run.png)
 
-Python 3.11+ recommended. From this folder:
+## Install and start
+
+Python 3.11–3.14. From the project folder:
 
 ```sh
 python -m venv .venv
@@ -15,43 +17,88 @@ python -m pip install -r requirements.txt
 python run_app.py
 ```
 
-After setup, double-click **Start Electrobot.command** on macOS or **Start Electrobot.bat** on Windows. Both use the project’s `.venv` automatically, with no activation needed. You can also run `python run_app.py` from a terminal; it prefers `.venv` when present.
+Double-click **Start Electrobot.command** on macOS or **Start Electrobot.bat** on Windows after setup. The launchers use `.venv` automatically. Simulation does not import the hardware SDKs or require .NET.
 
-The dashboard runs a batch, overlays synthetic CV curves, pauses/resumes and stops. Experiment, cell/carrier and robot/rack pages provide editable settings with validation. Save persists `settings.json`; load accepts saved configurations. Each batch produces settings, event log, status summary and per-electrode CSVs in `runs/`. Stops retain partial data and record status; no recovery motion is simulated after stopping. Simulation timestamps represent protocol time; execution is accelerated by the configured multiplier.
+For hardware, additionally install:
 
-Camera: connect with index -1 to search devices 0–4, or select a known index. Windows uses `CAP_DSHOW`, macOS `CAP_ANY`. Preview and PNG snapshots are available. Capture runs in its own thread. OS camera permission may be required. No image-based grasp detection is implemented yet.
+```sh
+python -m pip install -r requirements-hardware.txt
+```
 
-## Initial defaults
+On the Windows lab computer:
+
+- Install the **.NET Desktop Runtime 10.0** matching your Python architecture. The packaged PalmSens Windows runtime configuration requires both `Microsoft.NETCore.App` and `Microsoft.WindowsDesktop.App` 10.0.
+- Install the PalmSens USB drivers; PSTrace normally supplies these. Close PSTrace before connecting from Electrobot.
+- Start **DobotLink**. `dobotkit` talks to its WebSocket service (default `localhost:9090`); DobotLink relays commands over USB/COM to the arm. Set the correct arm COM port in Settings, or use `auto` when exactly one Dobot is available.
+- Connect the camera and allow OS camera access. Windows capture uses DirectShow; macOS uses the default OpenCV backend.
+
+## Experiment workspace
+
+The main page includes batch name, first rack slot, number of electrodes, CV cycle count, start/end and vertex potentials, scan rate, settling time, and rinse settings. It also contains device connection status, start/stop controls, per-electrode progress, a CV plot, a compact camera preview with snapshots, and the activity log. Drag the divider to resize plot versus camera.
+
+The camera is independent of robot/potentiostat mode: a real camera can be used during a simulated batch. No pickup detection or camera-based recovery is implemented yet.
+
+The plot overlays electrodes or shows a selected electrode. Displayed points are decimated for long batches so the UI remains responsive; CSV exports retain every received sample. Pause/resume is available in simulation. Hardware pause is disabled because interrupting a CV sweep would change the experiment; use Stop to abort.
+
+Native PalmSens CV returns to its start potential, so the UI has a combined **Start / end** setting. The simulator follows that same protocol. The reference label, potential step, fixed current range, mains frequency and simulation multiplier live under Settings → Measurement defaults.
+
+## Manual robot
+
+Use **Manual robot** to read the reported pose, home, jog XYZ/R, move to an absolute target, and open/close the gripper. Commands run in the same serialized worker as experiments, so batch and manual operations cannot compete for a device. Operations and mode changes are disabled during an active command.
+
+Hardware connection does not home, move, or actuate the gripper. Homing is explicit and required before hardware motion. Moves use `MOVL_XYZ`, wait for queued-command completion, and then verify reported XYZ/R against the configured tolerance. Timeouts, cancellation and pose mismatch stop and clear the queue. Rehome before subsequent hardware movement after a stop.
+
+**Teach station** copies the reported pose into rack slot 1, cell seating, rinse dipping, or travel height settings. Teaching and changes to station/workspace coordinates clear the calibration flag. Save the configuration after verifying the route. Gripper state is the *commanded* state, not confirmation of a successful pickup.
+
+## Settings and lab commissioning
+
+Settings groups persistent design and calibration parameters into Devices, Measurement defaults, Robot calibration, Workspace, and Cell & carrier tabs. Configurations save to `settings.json` and can be loaded from JSON. Profiles never connect hardware or change the selected mode automatically; every app session starts in Simulation.
+
+A suggested first lab session:
+
+1. Select Hardware, set the Dobot COM port and PalmSens device ID if more than one instrument is present, and connect the robot. Connect the potentiostat independently. An ambiguous discovery result is an error; the app does not silently pick a device or fall back to simulation.
+2. Clear the homing path and use Manual robot → Home. Test the gripper unloaded. The hardware driver uses `arm.effector.grip(on, queued=False)`; `True` closes it and `False` opens it. Check this behaviour on your installed gripper.
+3. Jog in small increments and teach rack slot 1, cell and rinse poses. Configure rack spacing/columns, tool rotation, travel height, and endpoint workspace bounds. Validate all straight-line approaches and clearance transfers, including the initial lift from the current pose.
+4. Verify carrier seating, immersion, release/retrieval, gripper clearance and dry WE electrical contact. Mark **Station poses and paths calibrated** and **Gripper, seating and dry contact verified**. Geometry changes clear the fixture flag.
+5. Connect the potentiostat, select a chemistry-appropriate CV protocol and current range, and start with one electrode. The device validates the method before any batch movement.
+
+A hardware batch turns the cell off before handling the electrode, lifts vertically at the current station before transferring at travel height, inserts/releases the carrier, waits for settling, runs CV, turns the cell off, retrieves, dips in the rinse beaker, and returns to the exact original rack slot. If measurement or movement fails, it stops and records the failure; it does not automatically attempt recovery.
+
+**Stop is a software command, not a physical emergency stop.** Robot stopping is limited by the DobotLink RPC response time and controller behaviour. Workspace limits constrain endpoints; they do not model obstacles, joint limits or collision-free paths. Use the hardware emergency-stop facility when needed. The defaults are simulation placeholders and must be calibrated.
+
+The pneumatic gripper pump is turned off by device disconnection. After a stop, secure any held electrode and open the gripper before disconnecting or closing. The UI blocks disconnect/close while the hardware gripper is commanded closed; closing during a hardware operation first requests a stop and leaves the app available for recovery.
+
+## Data and failure records
+
+Every batch creates a unique folder under `runs/` with the configuration snapshot, `events.json`, `summary.json`, and per-electrode CSVs. Hardware acquisition also saves the SDK JSON Lines stream. CSV current is normalized to µA and potential to V; unsupported units fail the measurement rather than being mislabelled. CSV time is **nominal CV sample time** (`step / scan_rate`), since CV callbacks provide E/I rather than measured timestamps; `time_source` makes this explicit. Simulation uses protocol timestamps. `synthetic` identifies simulated versus measured values.
+
+CSV rows are flushed as they arrive. Partial measurements survive cancellation and are marked stopped/failed. Failed cell-off or robot-stop cleanup is recorded explicitly. No retrieval or rinse proceeds after measurement failure. Summary grip state represents commands, not detected electrode presence.
+
+## Initial defaults and cap concept
 
 - Three electrodes, five-column rack, 22 mm pitch.
 - Rod Ø6 × 100 mm, Ø12 mm carrier shoulder, tip 50 mm below shoulder.
 - Nominal 100 mL low-form beaker: Ø50 × 70 mm; assumed rim Ø53 mm **must be measured**.
 - Cap: 4 mm plate, 6 mm outer skirt, 3 mm wall, 0.8 mm diametral rim clearance.
-- WE bore Ø6.6 mm with Ø10 mm / 2 mm deep conical entrance; RE Ø8 mm and CE Ø6 mm openings at ±14 mm.
-- Target immersion 15 mm. This requires a liquid surface 35 mm below the shoulder (31 mm below the plate underside). Volume alone does not fix immersion. Body/rim sizes vary, and the pouring spout must align with the cap notch.
-- CV: 0 → +0.5 → −0.5 → +0.5 → −0.5 → 0 V, two cycles, 100 mV/s, 5 mV steps, 100 µA range, 2 s settling. These are **simulation examples**, not a validated electrochemical method. Reference label and all protocol parameters are editable.
-- Three rinse dips, 1 s dwell each. Motion coordinates are arbitrary simulation placeholders; no hardware calibration is implied.
+- WE bore Ø6.6 mm, Ø10 mm / 2 mm deep conical guide; RE Ø8 and CE Ø6 openings at ±14 mm.
+- Target immersion 15 mm requires liquid 35 mm below the shoulder (31 mm below plate underside). Volume alone does not fix immersion.
+- CV: 0 → +0.5 → −0.5 → +0.5 → −0.5 → 0 V, two cycles, 100 mV/s, 5 mV step, 100 µA range; 2 s settling; three rinse dips at 1 s per dip. These are simulation examples, not a validated electrochemical method.
 
-## Cap concept
+`cad/cell_cap.stl` is a closed solid in mm; `cad/cell_cap.scad` is editable OpenSCAD. Export updated geometry from Settings → Cell & carrier or run `python -m electrobot.cad`. `cad/cap_sketch.svg` shows the concept.
 
-`cad/cell_cap.stl` is a closed solid in mm; `cad/cell_cap.scad` is editable OpenSCAD. Export updated files from Cell & carrier or run `python -m electrobot.cad`. Top-view concept sketch is included as `cad/cap_sketch.svg`.
-
-The removable cap has a surrounding locating skirt and an open spout notch/vent. The carrier shoulder rests on the plate; the tapered WE entrance guides insertion. RE/CE openings do **not** clamp electrodes: add compatible collars or clamps after their actual dimensions are known. Dry electrical contacts and a custom gripper are not included. It is a fit prototype, not a finalized cell fixture. Measure rim/body/spout and electrode lengths before printing. Print with the flat upper face on the bed and skirt upward, using a small fit coupon first if possible. Choose polymer/contact materials for the actual electrolyte and temperature; FDM parts may contaminate sensitive measurements. Keep the cap vented and fix the beaker externally so insertion cannot shift it.
-
-## Hardware integration next
-
-1. Record installed `dobotkit` version and verify gripper API against that version. Test opening/closing unloaded. The supplied movement example is the initial reference; no unverified actuator calls are used.
-2. Teach and validate rack, cell, rinse and clearance coordinates in the lab. Robot base origin, tool offsets, workspace boundaries, seating/contact detection and collision clearance need calibration. There is no automated hardware mode yet.
-3. Implement a Dobot driver and a PalmSens driver behind the experiment sequence. Verify device-specific stop, cell disconnect, completion and failure behaviour. UI Stop is currently a simulation control, not an emergency stop.
-4. Commission dry contacts and shoulder seating. Add pickup detection and bounded retries only after a reliable detection method is tested.
-
-The architecture currently contains a reusable experiment engine, simulated robot/potentiostat, a Qt run worker and independent camera worker. Later hardware adapters should expose the same operations but also provide completion/error feedback rather than assuming success.
+The cap has a surrounding locating skirt and open spout notch/vent. The carrier shoulder rests on the plate; the tapered opening guides the WE. RE/CE openings need separate compatible collars/clamps. Dry contacts and custom gripper parts are not included. Measure glassware and electrode lengths before printing. Print flat upper face on the bed, skirt upward. Choose materials for the actual electrolyte and temperature; FDM parts can contaminate sensitive measurements. Keep the cap vented and fix the beaker externally.
 
 ## Verification
 
 ```sh
 python -m unittest discover -s tests -v
+# macOS / Linux
 QT_QPA_PLATFORM=offscreen python tests/ui_smoke.py
+QT_QPA_PLATFORM=offscreen python tests/hardware_ui_smoke.py
+# Windows PowerShell
+# $env:QT_QPA_PLATFORM='offscreen'; python tests/ui_smoke.py
 ```
 
-Sources: [PalmSens EmStat4S specifications](https://assets.palmsens.com/product/emstat4s/), [PalmSens Python measurement documentation](https://sdk.palmsens.com/python/latest/_attachments/measuring/index.html), [Dobot Python library repository](https://github.com/mslopgk/dobotkit), [Qt thread signals](https://doc.qt.io/qtforpython-6.11/examples/example_widgets_thread_signals.html), [OpenCV VideoCapture](https://docs.opencv.org/4.5.5/d8/dfe/classcv_1_1VideoCapture.html). Beaker body dimensions are nominal placeholders; actual glassware must be measured.
+Tests cover sequence/data retention, SDK parameter/unit mapping, abort/cell-off, robot completion/tolerance/cancellation, selection ambiguity, hardware preflight, camera search/disconnection, and cap mesh validity. An additional hardware UI smoke run uses the real adapters with mock devices. UI smoke checks cover the workspace, manual control and teaching, settings persistence, mode isolation, pause/stop and shutdown. Hardware behaviour still needs physical commissioning.
+
+Sources: [Dobot library API/source](https://github.com/mslopgk/dobotkit), [PalmSens Python SDK installation](https://dev.palmsens.com/python/latest/_attachments/installation/), [PalmSens CV](https://sdk.palmsens.com/python/latest/_attachments/reference/methods/cyclic_voltammetry/), [PalmSens instrument management](https://sdk.palmsens.com/python/latest/_attachments/reference/instrument_async/), [EmStat4S specifications](https://assets.palmsens.com/product/emstat4s/), [OpenCV VideoCapture](https://docs.opencv.org/4.5.5/d8/dfe/classcv_1_1VideoCapture.html).

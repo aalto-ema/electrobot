@@ -34,7 +34,7 @@ On the Windows lab computer:
 
 ## Experiment workspace
 
-The main page includes batch name, first rack slot, number of electrodes, CV cycle count, start/end and vertex potentials, scan rate, settling time, and rinse settings. It also contains device connection status, start/stop controls, per-electrode progress, a CV plot, a compact camera preview with snapshots, and the activity log. Drag the divider to resize plot versus camera.
+The main page includes batch name, first rack slot, number of electrodes, CV cycle count, start/end and vertex potentials, scan rate, settling time, and rinse settings. It also contains device connection status, start/stop controls, per-electrode progress, a CV plot, a compact camera preview with snapshots, and the activity log. The lower workspace has three resizable columns: a compact CV plot, camera/activity, and the electrode queue on the right. Drag the dividers to adjust their widths.
 
 The camera is independent of robot/potentiostat mode: a real camera can be used during a simulated batch. No pickup detection or camera-based recovery is implemented yet.
 

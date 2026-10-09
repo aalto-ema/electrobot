@@ -86,7 +86,9 @@ CSV rows are flushed as they arrive. Partial measurements survive cancellation a
 
 `cad/cell_cap.stl` is a closed solid in mm; `cad/cell_cap.scad` is editable OpenSCAD. Export updated geometry from Settings → Cell & carrier or run `python -m electrobot.cad`. `cad/cap_sketch.svg` shows the concept.
 
-The cap has a surrounding locating skirt and open spout notch/vent. The carrier shoulder rests on the plate; the tapered opening guides the WE. RE/CE openings need separate compatible collars/clamps. Dry contacts and custom gripper parts are not included. Measure glassware and electrode lengths before printing. Print flat upper face on the bed, skirt upward. Choose materials for the actual electrolyte and temperature; FDM parts can contaminate sensitive measurements. Keep the cap vented and fix the beaker externally.
+The cap has a surrounding locating skirt and open spout notch/vent. The carrier shoulder rests on the plate; the tapered opening guides the WE. RE/CE openings need separate compatible collars/clamps. The cap model does not include electrical contacts or gripper parts. Measure glassware and electrode lengths before printing. Print flat upper face on the bed, skirt upward. Choose materials for the actual electrolyte and temperature; FDM parts can contaminate sensitive measurements. Keep the cap vented and fix the beaker externally.
+
+Provisional pickup-collar and three-finger probe-bracket STLs are in [`cad/gripper`](cad/gripper/README.md), with editable JSON dimensions and a Python generator. Their mounting geometry has not been fitted to the physical gripper. The measurement checklist, print notes and separate metal components are documented there. The provisional 24 mm flange also requires a larger rack pitch than the current 22 mm default. This design requires a hold-during-CV sequence, which is not yet implemented.
 
 ## Verification
 

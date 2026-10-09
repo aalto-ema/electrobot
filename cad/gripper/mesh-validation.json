@@ -1,0 +1,53 @@
+{
+  "pickup_collar": {
+    "watertight": true,
+    "connected_solids": 1,
+    "volume_mm3": 4420.19,
+    "bounds_mm": [
+      [
+        -12.0,
+        -12.0,
+        0.0
+      ],
+      [
+        12.0,
+        12.0,
+        17.0
+      ]
+    ]
+  },
+  "probe_bracket_front": {
+    "watertight": true,
+    "connected_solids": 1,
+    "volume_mm3": 10588.83,
+    "bounds_mm": [
+      [
+        -19.200000762939453,
+        -8.0,
+        -47.5
+      ],
+      [
+        19.200000762939453,
+        47.5,
+        6.0
+      ]
+    ]
+  },
+  "probe_bracket_rear": {
+    "watertight": true,
+    "connected_solids": 1,
+    "volume_mm3": 2848.89,
+    "bounds_mm": [
+      [
+        -19.200000762939453,
+        -14.199999809265137,
+        -6.0
+      ],
+      [
+        19.200000762939453,
+        -0.5,
+        6.0
+      ]
+    ]
+  }
+}

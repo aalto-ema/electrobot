@@ -9,6 +9,18 @@ from electrobot.config import Settings
 from electrobot.engine import Experiment,Control,Cancelled,SimRobot
 
 class CoreTests(unittest.TestCase):
+    def test_rack_diagram_tracks_columns_and_selected_slots(self):
+        from electrobot.calibration_widgets import rack_layout,rack_points
+        for columns in (1,4,7,20):
+            s=Settings(rack_columns=columns,first_electrode=9,electrodes=17)
+            cols,rows,slots=rack_layout(s)
+            self.assertEqual(cols,columns)
+            self.assertEqual(rows,(25+columns-1)//columns)
+            self.assertEqual([i for i,_,_,selected in slots if selected],list(range(9,26)))
+            for i,col,row,_ in slots:
+                self.assertEqual(s.rack_pose(i),(s.rack_x+col*s.rack_pitch,s.rack_y+row*s.rack_pitch,s.rack_z))
+            self.assertEqual([(i,x,y,z) for i,x,y,z,_ in rack_points(s)],[(i,*s.rack_pose(i)) for i,_,_,_ in slots])
+
     def test_calibration_reports_multiple_conflicts(self):
         s=Settings(safe_z=10,cell_x=350,workspace_y_min=100,workspace_y_max=-100)
         messages=[message for _,message in s.calibration_issues()]

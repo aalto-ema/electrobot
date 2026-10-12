@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QLabel,QPushButt
     QHeaderView,QAbstractItemView,QSizePolicy)
 from .config import Settings
 from .calibration_widgets import CalibrationDiagram,RobotTracker
+from .rack_widgets import RackDiagram
 from .worker import DeviceWorker
 from .camera import CameraWorker
 from .widgets import Plot,CapSketch,CameraPreview,STYLE,button,card
@@ -53,6 +54,10 @@ class Window(QMainWindow):
         for key in ('rod_diameter','rod_length','shoulder_diameter','tip_below_shoulder',
                     'cap_thickness','we_clearance','funnel_diameter','rack_socket_clearance','rack_socket_depth','rack_post_height','rack_socket_wall','rack_base_thickness','rack_margin'):
             self.fields[key].valueChanged.connect(lambda:self.fields['fixture_verified'].setChecked(False))
+        for key,f in self.fields.items():
+            if key.startswith('holder_') or key in ('rack_holder_clearance','rack_seat_depth','rack_deck_thickness','rack_seat_wall','rack_rib_width','rack_hanging_length','rack_tip_clearance','rack_gripper_gap','rack_module_slots','rack_peg_diameter','rack_peg_clearance','rack_peg_length','rack_foot_base','rack_foot_column_diameter','rack_foot_mount_hole'):
+                f.valueChanged.connect(lambda:self.fields['fixture_verified'].setChecked(False))
+        self.fields['rack_design'].currentIndexChanged.connect(lambda:self.fields['fixture_verified'].setChecked(False))
         for key in ('electrodes','first_electrode'):
             self.fields[key].valueChanged.connect(self.prepare_queue)
         self.prepare_queue()
@@ -133,13 +138,13 @@ class Window(QMainWindow):
         try: s.validate()
         except ValueError as exc:
             if not self.validation_issues: self.validation_issues=[((),str(exc))]
-        for diagram in (self.calibration_diagram,self.workspace_diagram,self.experiment_tracker,self.manual_tracker): diagram.set_settings(s)
+        for diagram in (self.calibration_diagram,self.workspace_diagram,self.experiment_tracker,self.manual_tracker,self.rack_diagram): diagram.set_settings(s)
         bad={key for keys,_ in self.validation_issues for key in keys}
         for key,f in self.fields.items():
             f.setStyleSheet('border: 2px solid #c34848;' if key in bad else '')
         messages=list(dict.fromkeys(message for _,message in self.validation_issues))
         text=('Check settings:\n'+'\n'.join('• '+m for m in messages[:12])+(f'\n… {len(messages)-12} more issues' if len(messages)>12 else '')) if messages else '✓ Dimensions and selected route endpoints are compatible. Physical clearance still needs verification.'
-        for label in (self.calibration_feedback,self.workspace_feedback):
+        for label in (self.calibration_feedback,self.workspace_feedback,self.rack_feedback):
             label.setText(text); label.setStyleSheet('color: #b53636;' if messages else 'color: #08796f;')
         if hasattr(self,'worker'): self.refresh_controls()
 
@@ -268,11 +273,11 @@ class Window(QMainWindow):
     def settings_tab(self,title):
         scroll=QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         content=QWidget(); layout=QVBoxLayout(content); layout.setSpacing(16); scroll.setWidget(content); self.settings_tabs.addTab(scroll,title); return layout
-    def calibration_tab(self,title):
+    def calibration_tab(self,title,diagram_type=None):
         tab=QWidget(); outer=QVBoxLayout(tab); outer.setContentsMargins(10,10,10,10)
         feedback=self.note(''); outer.addWidget(feedback)
         split=QSplitter(Qt.Orientation.Vertical); outer.addWidget(split,1)
-        diagram=CalibrationDiagram(workspace=True); diagram.setMinimumHeight(240); split.addWidget(diagram)
+        diagram=diagram_type() if diagram_type else CalibrationDiagram(workspace=True); diagram.setMinimumHeight(240); split.addWidget(diagram)
         scroll=QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QScrollArea.Shape.NoFrame); scroll.setMinimumHeight(140)
         content=QWidget(); layout=QVBoxLayout(content); layout.setSpacing(16); scroll.setWidget(content); split.addWidget(scroll)
         split.setChildrenCollapsible(False); split.setSizes([300,400]); split.setStretchFactor(0,0); split.setStretchFactor(1,1)
@@ -317,20 +322,48 @@ class Window(QMainWindow):
             'rotation_tolerance':'Maximum R angle error accepted after queue completion.',
         }.items(): self.fields[key].setToolTip(tip)
         robot.addWidget(self.settings_group('Hardware batch readiness', [('calibrated','Station poses and paths calibrated'),('fixture_verified','Gripper, seating and dry contact verified')]))
-        robot.addWidget(self.settings_group('Printable rod rack (mm)', [('rack_socket_clearance','Socket diametral clearance',.1,3),('rack_socket_depth','Blind socket depth',1,200),('rack_post_height','Socket post height',2,250),('rack_socket_wall','Socket wall thickness',2,20),('rack_base_thickness','Base thickness',2,30),('rack_margin','Base edge margin',1,30),('rinse_beaker_diameter','Rinse beaker diameter',10,250)]))
-        self.rack_export=button('Export rod rack STL + OpenSCAD…',self.export_rack); robot.addWidget(self.rack_export)
-        robot.addWidget(self.note('Rack export includes complete rows through the last selected slot. Socket depth must exceed the tip length below the carrier shoulder. Choose compatible materials and verify printer-bed dimensions. Bare rods without a shoulder and flag electrodes need a different insert; teach rack Z after fitting the physical rack.'))
         robot.addWidget(self.note('Default coordinates and workspace bounds are placeholders. Position feedback verifies arm pose, not successful pickup or electrical contact. No automatic retry is enabled.')); robot.addStretch()
         bounds,self.workspace_feedback,self.workspace_diagram,self.workspace_scroll=self.calibration_tab('Workspace')
         bounds.addWidget(self.note('These bounds constrain commanded endpoints. They do not model obstacles, joint limits or collision-free paths. Validate the complete travel route in the lab.'))
         bounds.addWidget(self.settings_group('Cartesian bounds (mm)', [(f'workspace_{axis}_{end}',f'{axis.upper()} {end}',-400,400) for axis in 'xyz' for end in ('min','max')]))
-        bounds.addWidget(self.settings_group('Radial bounds from base (mm)', [('workspace_radius_min','Minimum radius',0,400),('workspace_radius_max','Maximum radius',1,400)])); bounds.addStretch()
+        bounds.addWidget(self.settings_group('Radial bounds from base (mm)', [('workspace_radius_min','Minimum radius',0,400),('workspace_radius_max','Maximum radius',1,400)]))
+        bounds.addWidget(self.settings_group('Rinse footprint (mm)', [('rinse_beaker_diameter','Rinse beaker diameter',10,250)]))
+        bounds.addStretch()
         cell=self.settings_tab('Cell & carrier'); row=QHBoxLayout()
         row.addWidget(self.settings_group('Beaker & cap (mm)', [('beaker_diameter','Body diameter'),('beaker_height','Beaker height'),('rim_diameter','Measured rim diameter'),('cap_clearance','Diametral clearance'),('cap_wall','Skirt wall'),('cap_thickness','Plate thickness'),('skirt_depth','Skirt depth'),('re_hole','RE opening'),('ce_hole','CE opening'),('port_offset','RE/CE offset')]))
         row.addWidget(self.settings_group('Carrier & guide (mm)', [('rod_diameter','Rod diameter'),('rod_length','Rod length'),('shoulder_diameter','Shoulder diameter'),('tip_below_shoulder','Tip below shoulder'),('immersion','Target immersion'),('we_clearance','WE clearance'),('funnel_diameter','Guide mouth')]))
         cell.addLayout(row); self.sketch=CapSketch(self.s); cell.addWidget(self.sketch)
         ca=QHBoxLayout(); ca.addWidget(button('Update sketch',self.update_sketch)); ca.addWidget(button('Export STL + OpenSCAD…',self.export_cap,True)); ca.addStretch(); cell.addLayout(ca)
         cell.addWidget(self.note('Nominal 100 mL beaker: Ø50 × 70 mm. Measure its rim before printing. The cap is vented; RE/CE collars, dry contacts and custom gripper remain separate parts.'))
+        rack,self.rack_feedback,self.rack_diagram,self.rack_scroll=self.calibration_tab('Rack design',RackDiagram)
+        design=QGroupBox('Rack construction'); rf=QFormLayout(design)
+        self.combo_field(rf,'rack_design','Design',[('Legacy blind rod sockets','socket'),('Modular holder-supported lattice','lattice')]); rack.addWidget(design)
+        self.rack_export=button('Export rack printing files…',self.export_rack); rack.addWidget(self.rack_export)
+        self.lattice_preset=button('Use lattice and allow holder spacing',self.use_lattice,True); rack.addWidget(self.lattice_preset)
+        rack.addWidget(self.note('Uses batch slot range, columns, XY coordinates and rectangular/radial layout from Experiment and Robot calibration. Complete rows are exported. The spacing button only widens pitch/angle as needed; it commands no motion and clears readiness.'))
+        self.holder_group=self.settings_group('Pickup holder (mm)', [('holder_diameter','Grip body diameter',10,60),('holder_height','Grip body height',8,60),('holder_flange_diameter','Upper flange diameter',12,80),('holder_flange_thickness','Flange thickness',2,15),('holder_rod_depth','Rod socket depth',3,55),('holder_rod_clearance','Rod diametral clearance',.1,2),('holder_pad_diameter','Contact-pad recess diameter',2,30),('holder_pad_depth','Contact-pad recess depth',.2,8),('holder_wire_diameter','Wire passage diameter',.5,8),('holder_set_screw_diameter','Set-screw pilot diameter',1,6)])
+        rack.addWidget(self.holder_group)
+        self.lattice_group=self.settings_group('Top support and free-hanging rod (mm)', [('rack_holder_clearance','Holder recess clearance',.1,3),('rack_seat_depth','Holder locating depth',.5,10),('rack_deck_thickness','Top thickness',4,20),('rack_seat_wall','Seat outer wall',2,10),('rack_rib_width','Connecting rib width',4,20),('rack_hanging_length','Rod below holder bottom',5,200),('rack_tip_clearance','Tip clearance above bench',5,50),('rack_gripper_gap','Extra gap beyond flange',2,50)])
+        rack.addWidget(self.lattice_group)
+        self.module_group=self.settings_group('Reusable parts and printer', [('rack_module_slots','Maximum slots per top module',1,12),('rack_peg_diameter','Foot peg diameter (mm)',3,8),('rack_peg_clearance','Peg socket clearance (mm)',.1,1.5),('rack_peg_length','Peg insertion length (mm)',1,6),('rack_foot_base','Foot base thickness (mm)',2,10),('rack_foot_column_diameter','Foot column diameter (mm)',6,16),('rack_foot_mount_hole','Foot fixing hole (mm)',2,4),('rack_printer_width','Printer usable width (mm)',40,500),('rack_printer_depth','Printer usable depth (mm)',40,500)])
+        rack.addWidget(self.module_group)
+        rack.addWidget(self.note('Hanging length must cover the rod length (Cell & carrier) minus its insertion into the holder, plus any extra active-tip projection. Top modules, identical fork feet and pickup holders are separate STL files with quantities and assembly coordinates. Pegs are provisional removable push fits; secure each independent module to the bench. Reuse full modules when coordinates, holder dimensions and module size stay unchanged; changed partial modules may need reprinting. Print a fit trial first. Metal contact, wire and rod-retention screw are separate parts.'))
+        self.socket_group=self.settings_group('Legacy blind-socket rack (mm)', [('rack_socket_clearance','Socket diametral clearance',.1,3),('rack_socket_depth','Blind socket depth',1,200),('rack_post_height','Socket post height',2,250),('rack_socket_wall','Socket wall thickness',2,20),('rack_base_thickness','Base thickness',2,30),('rack_margin','Base edge margin',1,30)])
+        rack.addWidget(self.socket_group)
+        rack.addWidget(self.note('Changing the holder does not redesign the cell cap or electrical probe bracket. Confirm compatibility before printing. Physical seat height does not set robot gripping Z; teach Z after assembly.')); rack.addStretch()
+
+    def use_lattice(self):
+        from dataclasses import replace
+        import math
+        s=replace(self.read_settings(validate=False),rack_design='lattice',calibrated=False,fixture_verified=False)
+        separation=s.lattice_dimensions()['separation']+.5
+        s.rack_pitch=max(s.rack_pitch,separation)
+        if s.rack_layout=='radial':
+            if separation>=2*s.rack_radius:
+                self.statusBar().showMessage('Rack radius is too small for holder spacing'); return
+            s.rack_angle_step=max(s.rack_angle_step,math.degrees(2*math.asin(separation/(2*s.rack_radius))))
+        self.apply_settings(s)
+        self.statusBar().showMessage('Lattice selected; spacing widened if needed. No movement commanded. Check workspace and teach rack Z after assembly.')
 
     def submit(self,command,payload=None):
         if self.busy or self._close_pending: return
@@ -382,6 +415,11 @@ class Window(QMainWindow):
         for key in ('rack_radius','rack_start_angle','rack_angle_step'): self.fields[key].setEnabled(idle and radial)
         for key in ('rack_x','rack_y'): self.fields[key].setEnabled(idle and not radial)
         self.placement_export.setEnabled(idle); self.rack_export.setEnabled(idle)
+        self.lattice_preset.setEnabled(idle)
+        lattice=self.fields['rack_design'].currentData()=='lattice'
+        for group in (self.holder_group,self.lattice_group,self.module_group):
+            group.setEnabled(idle and lattice); group.setVisible(lattice)
+        self.socket_group.setEnabled(idle and not lattice); self.socket_group.setVisible(not lattice)
         self.setup_box.setEnabled(idle); self.settings_tabs.setEnabled(idle); self.save_button.setEnabled(idle); self.load_button.setEnabled(idle)
         for b in self.manual_buttons: b.setEnabled(idle and d.get('robot',False))
         for b in self.motion_buttons: b.setEnabled(idle and d.get('robot',False) and (not hardware or d.get('homed',False)))
@@ -515,8 +553,11 @@ class Window(QMainWindow):
             try:
                 from .rack_cad import export_rack
                 path=export_rack(s,folder); meta=json.loads(Path(folder,'rack_manifest.json').read_text())
-                size=[b-a for a,b in zip(*meta['bounds_mm'])]
-                self.statusBar().showMessage(f'Rack exported: {path} | {size[0]:.1f} × {size[1]:.1f} × {size[2]:.1f} mm; check printer bed and teach rack Z.')
+                if s.rack_design=='lattice':
+                    self.statusBar().showMessage(f'Modular rack exported: {len(meta["modules"])} top modules, {meta["foot_quantity"]} identical feet, {meta["holder_quantity"]} holders. See ASSEMBLY.md and rack_manifest.json; teach rack Z.')
+                else:
+                    size=[b-a for a,b in zip(*meta['bounds_mm'])]
+                    self.statusBar().showMessage(f'Rack exported: {path} | {size[0]:.1f} × {size[1]:.1f} × {size[2]:.1f} mm; check printer bed and teach rack Z.')
             except Exception as exc: QMessageBox.warning(self,'Rack export failed',str(exc))
 
     def export_cap(self):

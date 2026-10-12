@@ -7,6 +7,10 @@ from dataclasses import asdict
 def rack_geometry(s):
     from shapely.geometry import Point,MultiPoint
     positions=s.rack_export_positions()
+    if s.rack_design=='lattice':
+        from .lattice_rack import footprint
+        d=s.lattice_dimensions()
+        return positions,footprint(s),d['bore'],d['outer']
     bore=(s.rod_diameter+s.rack_socket_clearance)/2
     outer=bore+s.rack_socket_wall
     xy=[p[:2] for p in positions]
@@ -16,6 +20,9 @@ def rack_geometry(s):
 
 
 def export_rack(s,folder):
+    if s.rack_design=='lattice':
+        from .lattice_rack import export_lattice
+        return export_lattice(s,folder)
     s.validate()
     issues=[m for keys,m in s.calibration_issues() if 'Rack slots need' in m]
     if issues: raise ValueError(issues[0])

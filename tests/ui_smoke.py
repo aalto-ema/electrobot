@@ -77,6 +77,30 @@ with tempfile.TemporaryDirectory() as d:
     assert Path(d,'placement.pdf').read_bytes().startswith(b'%PDF')
     with patch.object(module.QFileDialog,'getExistingDirectory',return_value=d): w.export_rack()
     assert Path(d,'electrode_rack.stl').exists() and Path(d,'rack_manifest.json').exists()
+    w.settings_tabs.setCurrentIndex(5); w.use_lattice(); app.processEvents()
+    assert w.read_settings().rack_design=='lattice' and w.holder_group.isEnabled() and not w.socket_group.isEnabled()
+    assert not any('Rack slots need' in m for _,m in w.validation_issues)
+    before=w.fields['holder_diameter'].value(); w.fields['holder_diameter'].setValue(before+2)
+    assert w.rack_diagram.settings.holder_diameter==before+2
+    assert any('Rack slots need' in m for _,m in w.validation_issues)
+    w.use_lattice(); app.processEvents()
+    assert not any('Rack slots need' in m for _,m in w.validation_issues)
+    w.grab().save('cad/ui-rack-design.png')
+    top=w.rack_diagram.mapTo(w,w.rack_diagram.rect().topLeft())
+    w.rack_scroll.verticalScrollBar().setValue(w.rack_scroll.verticalScrollBar().maximum()); app.processEvents()
+    assert w.rack_diagram.mapTo(w,w.rack_diagram.rect().topLeft())==top
+    w.grab().save('cad/ui-rack-design-scrolled.png')
+    with patch.object(module.QFileDialog,'getExistingDirectory',return_value=d): w.export_rack()
+    meta=json.loads(Path(d,'rack_manifest.json').read_text())
+    assert meta['design']=='collar-supported modular lattice' and Path(d,'rack_foot.stl').exists() and Path(d,'pickup_holder.stl').exists()
+    with patch.object(module.QFileDialog,'getSaveFileName',return_value=(str(Path(d)/'lattice-placement.pdf'),'PDF')): w.export_placement()
+    assert Path(d,'lattice-placement.pdf').read_bytes().startswith(b'%PDF')
+    profile=Path(d,'lattice-profile'); profile.mkdir()
+    with patch.object(module,'ROOT',profile): w.save()
+    w.fields['holder_diameter'].setValue(18)
+    with patch.object(module.QFileDialog,'getOpenFileName',return_value=(str(profile/'settings.json'),'JSON')): w.load()
+    assert w.read_settings().rack_design=='lattice' and w.fields['holder_diameter'].value()==before+2
+    with patch.object(module.QFileDialog,'getOpenFileName',return_value=(str(path),'JSON')): w.load()
     w.fields['rack_layout'].setCurrentIndex(0); w.nav.setCurrentRow(0)
 # Hardware mode must not implicitly connect, home or move either device.
 w.mode.setCurrentIndex(1); idle(); assert not w.device_state['robot'] and not w.device_state['potentiostat']

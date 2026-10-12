@@ -49,11 +49,13 @@ def export_placement_pdf(s,path):
         for radius in (s.workspace_radius_min,s.workspace_radius_max):
             painter.setPen(QPen(QColor('#cadbe2'),.25)); painter.drawEllipse(center,radius*scale,radius*scale)
         from PySide6.QtGui import QPolygonF
-        outline=QPolygonF([transform(x,y) for x,y in base.exterior.coords])
-        painter.setPen(QPen(QColor('#635bce'),.4)); painter.drawPolygon(outline)
+        for polygon in ([base] if base.geom_type=='Polygon' else base.geoms):
+            outline=QPolygonF([transform(x,y) for x,y in polygon.exterior.coords])
+            painter.setPen(QPen(QColor('#635bce'),.4)); painter.drawPolygon(outline)
         for i,(x,y,_) in enumerate(positions,1):
             pos=transform(x,y); painter.setPen(QPen(QColor('#635bce'),.25))
-            painter.drawEllipse(pos,(s.rod_diameter+s.rack_socket_clearance)/2*scale,(s.rod_diameter+s.rack_socket_clearance)/2*scale)
+            radius=s.lattice_dimensions()['seat'] if s.rack_design=='lattice' else (s.rod_diameter+s.rack_socket_clearance)/2
+            painter.drawEllipse(pos,radius*scale,radius*scale)
             line(pos.x()-1,pos.y(),pos.x()+1,pos.y(),'#635bce'); line(pos.x(),pos.y()-1,pos.x(),pos.y()+1,'#635bce')
             text(pos.x()+2,pos.y()+2,i,2)
         for x,y,r,label in circles:
@@ -70,7 +72,8 @@ def export_placement_pdf(s,path):
         transform=lambda x,y:QPointF(15+(x-minx)*factor,180-(y-miny)*factor)
         draw_map(transform,QRectF(12,25,195,160))
         text(210,32,'Coordinate convention',4)
-        notes=['+X right; +Y up in top view.', 'Z values refer to robot tool pose.', 'Orange cross = XY origin datum.', 'Not a measured robot base footprint.', 'Align origin and axis directions', 'using taught robot references.', 'Beaker circles use entered diameters.', 'Cell center assumes central WE port.', 'Robot reach / collisions are not', 'certified by this placement sheet.', '', f'Travel Z: {s.safe_z:g}',f'Tool R: {s.tool_r:g} deg',f'Rack grip Z: {s.rack_z:g}',f'Cell seat Z: {s.cell_z:g}',f'Rinse dip Z: {s.rinse_z:g}',f'Rack printed height: {s.rack_base_thickness+s.rack_post_height:g}']
+        printed_height=s.lattice_dimensions()['seat_height']+s.rack_seat_depth if s.rack_design=='lattice' else s.rack_base_thickness+s.rack_post_height
+        notes=['+X right; +Y up in top view.', 'Z values refer to robot tool pose.', 'Orange cross = XY origin datum.', 'Not a measured robot base footprint.', 'Align origin and axis directions', 'using taught robot references.', 'Beaker circles use entered diameters.', 'Cell center assumes central WE port.', 'Robot reach / collisions are not', 'certified by this placement sheet.', '', f'Travel Z: {s.safe_z:g}',f'Tool R: {s.tool_r:g} deg',f'Rack grip Z: {s.rack_z:g}',f'Cell seat Z: {s.cell_z:g}',f'Rinse dip Z: {s.rinse_z:g}',f'Rack printed height: {printed_height:g}']
         for n,t in enumerate(notes): text(210,40+n*7,t,3)
         text(12,191,'Check actual tool offset, gripper/cable clearance, rack seating and glassware before movement. Print tiles at 100%, not Fit.',3)
         # Complete coordinate table, including inactive sockets in final row.

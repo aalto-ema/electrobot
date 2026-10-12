@@ -43,6 +43,34 @@ class Settings:
     rack_socket_wall: float = 3.0
     rack_base_thickness: float = 4.0
     rack_margin: float = 6.0
+    rack_design: str = 'socket'
+    holder_diameter: float = 18.0
+    holder_height: float = 14.0
+    holder_flange_diameter: float = 24.0
+    holder_flange_thickness: float = 3.0
+    holder_rod_depth: float = 13.0
+    holder_rod_clearance: float = 0.3
+    holder_pad_diameter: float = 8.0
+    holder_pad_depth: float = 1.0
+    holder_wire_diameter: float = 2.0
+    holder_set_screw_diameter: float = 2.5
+    rack_holder_clearance: float = 0.4
+    rack_seat_depth: float = 1.5
+    rack_deck_thickness: float = 6.0
+    rack_seat_wall: float = 3.0
+    rack_rib_width: float = 6.0
+    rack_hanging_length: float = 87.0
+    rack_tip_clearance: float = 10.0
+    rack_gripper_gap: float = 8.0
+    rack_module_slots: int = 4
+    rack_peg_diameter: float = 4.0
+    rack_peg_clearance: float = 0.3
+    rack_peg_length: float = 2.0
+    rack_foot_base: float = 3.0
+    rack_foot_column_diameter: float = 6.0
+    rack_foot_mount_hole: float = 3.4
+    rack_printer_width: float = 220.0
+    rack_printer_depth: float = 220.0
     rinse_beaker_diameter: float = 50.0
     rod_diameter: float = 6.0
     rod_length: float = 100.0
@@ -88,11 +116,14 @@ class Settings:
     reference_label: str = 'Ag/AgCl (confirm electrolyte)'
 
     def validate(self):
+        if self.rack_design not in ('socket','lattice'): raise ValueError('Unknown rack design')
         if self.rack_layout not in ('rectangular','radial'): raise ValueError('Rack layout must be rectangular or radial')
         for key in ('rack_radius','rack_angle_step','rack_socket_clearance','rack_socket_depth','rack_post_height','rack_socket_wall','rack_base_thickness','rack_margin','rinse_beaker_diameter'):
             if not math.isfinite(getattr(self,key)) or getattr(self,key)<=0: raise ValueError(f'{key} must be finite and positive')
-        if self.rack_socket_depth>=self.rack_post_height: raise ValueError('Socket depth must be below post height to leave a floor')
-        if self.rack_socket_depth<=self.tip_below_shoulder: raise ValueError('Rack socket must be deeper than the tip below shoulder to keep the active tip off the floor')
+        if self.rack_design=='socket':
+            if self.rack_socket_depth>=self.rack_post_height: raise ValueError('Socket depth must be below post height to leave a floor')
+            if self.rack_socket_depth<=self.tip_below_shoulder: raise ValueError('Rack socket must be deeper than the tip below shoulder to keep the active tip off the floor')
+        else: self.validate_lattice()
         if self.rack_socket_wall<2 or self.rack_base_thickness<2: raise ValueError('Rack wall and base must be at least 2 mm')
         if self.rack_layout=='radial' and (self.rack_columns-1)*self.rack_angle_step>=360:
             raise ValueError('Radial row must span less than 360 degrees')
@@ -169,6 +200,48 @@ class Settings:
             raise ValueError('Protocol exceeds 200,000 points')
         return self
 
+    def lattice_dimensions(self):
+        peg_offset=self.holder_diameter/2+1.0
+        bore=(self.rod_diameter+self.we_clearance)/2
+        seat=(self.holder_diameter+self.rack_holder_clearance)/2
+        outer=max(seat+self.rack_seat_wall,peg_offset+(self.rack_peg_diameter+self.rack_peg_clearance)/2+self.rack_seat_wall,peg_offset+self.rack_foot_column_diameter/2+.5)
+        foot_radius=max(6.0,self.rack_peg_diameter/2+3,self.rack_foot_column_diameter/2+3)
+        separation=max(self.holder_flange_diameter+self.rack_gripper_gap,2*outer+1,2*(peg_offset+foot_radius)+1)
+        seat_height=self.rack_hanging_length+self.rack_tip_clearance
+        foot_height=seat_height-self.rack_deck_thickness+self.rack_seat_depth
+        return {'bore':bore,'seat':seat,'outer':outer,'peg_offset':peg_offset,'foot_radius':foot_radius,
+                'separation':separation,'seat_height':seat_height,'foot_height':foot_height}
+
+    def validate_lattice(self):
+        keys=('holder_diameter','holder_height','holder_flange_diameter','holder_flange_thickness','holder_rod_depth',
+              'holder_rod_clearance','holder_pad_diameter','holder_pad_depth','holder_wire_diameter','holder_set_screw_diameter',
+              'rack_holder_clearance','rack_seat_depth','rack_deck_thickness','rack_seat_wall','rack_rib_width',
+              'rack_hanging_length','rack_tip_clearance','rack_gripper_gap','rack_peg_diameter','rack_peg_clearance',
+              'rack_peg_length','rack_foot_base','rack_foot_column_diameter','rack_foot_mount_hole','rack_printer_width','rack_printer_depth')
+        if any(not math.isfinite(getattr(self,k)) or getattr(self,k)<=0 for k in keys): raise ValueError('Holder and lattice dimensions must be finite and positive')
+        if not 1<=self.rack_module_slots<=12: raise ValueError('Use 1–12 slots per top module')
+        d=self.lattice_dimensions()
+        if self.holder_flange_diameter<self.holder_diameter+2: raise ValueError('Holder flange needs at least 2 mm beyond the grip body')
+        if self.holder_diameter<=self.rod_diameter+self.holder_rod_clearance+4: raise ValueError('Holder needs at least 2 mm of wall around the rod socket')
+        if self.holder_rod_depth>self.holder_height-1: raise ValueError('Holder rod socket needs at least 1 mm roof below flange')
+        if self.holder_rod_depth>=self.rod_length: raise ValueError('Holder socket depth must be less than the electrode rod length')
+        if self.rack_hanging_length<self.rod_length-self.holder_rod_depth:
+            raise ValueError('Hanging length must cover rod length minus holder socket depth; include any additional active-tip projection')
+        if self.holder_pad_diameter+2>self.holder_flange_diameter or self.holder_pad_depth>self.holder_flange_thickness-1:
+            raise ValueError('Contact recess must leave a 1 mm rim and floor in the flange')
+        if self.holder_wire_diameter>=min(self.holder_pad_diameter,self.rod_diameter+self.holder_rod_clearance): raise ValueError('Wire passage must be smaller than pad and rod socket')
+        if self.holder_set_screw_diameter>=self.holder_rod_depth-2: raise ValueError('Set-screw pilot is too large for the rod socket depth')
+        if self.rack_seat_depth>=self.holder_height-5: raise ValueError('Leave at least 5 mm of holder body exposed for gripping')
+        if d['bore']+2>=d['seat']: raise ValueError('Holder seat needs at least 2 mm bearing width around the rod opening')
+        if self.rack_deck_thickness-self.rack_seat_depth-self.rack_peg_length-self.rack_peg_clearance<2:
+            raise ValueError('Top support needs 2 mm floor between the holder recess and foot sockets')
+        if self.rack_rib_width<4 or self.rack_seat_wall<2 or self.rack_foot_base<2: raise ValueError('Use ribs ≥4 mm, seat walls ≥2 mm and foot bases ≥2 mm')
+        if d['foot_height']<=self.rack_foot_base+5: raise ValueError('Hanging length and clearance leave insufficient foot height')
+        if self.rack_peg_diameter>self.rack_foot_column_diameter-2: raise ValueError('Foot column needs at least a 1 mm shoulder around its peg')
+        if self.rack_foot_mount_hole>4: raise ValueError('Foot mounting tab supports holes up to 4 mm diameter')
+        if d['peg_offset']-self.rack_foot_column_diameter/2<=d['bore']+1: raise ValueError('Foot columns need clearance around the rod passage')
+        return self
+
     def rack_pose(self,index):
         if self.rack_layout=='radial':
             radius=self.rack_radius+((index-1)//self.rack_columns)*self.rack_pitch
@@ -211,10 +284,10 @@ class Settings:
         if self.rack_pitch<=self.shoulder_diameter+4:
             add(('rack_pitch','shoulder_diameter'),'Slot pitch must exceed shoulder diameter + 4 mm.')
         positions=self.rack_export_positions()
-        separation=max(self.shoulder_diameter+4,self.rod_diameter+self.rack_socket_clearance+2*self.rack_socket_wall+1)
+        separation=self.lattice_dimensions()['separation'] if self.rack_design=='lattice' else max(self.shoulder_diameter+4,self.rod_diameter+self.rack_socket_clearance+2*self.rack_socket_wall+1)
         for i,a in enumerate(positions):
             if any(math.dist(a[:2],b[:2])<separation for b in positions[i+1:]):
-                add(('rack_layout','rack_columns','rack_pitch','rack_radius','rack_angle_step','rack_socket_wall','shoulder_diameter'),f'Rack slots need at least {separation:g} mm separation for carriers and printed sockets.')
+                add(('rack_layout','rack_columns','rack_pitch','rack_radius','rack_angle_step','rack_socket_wall','shoulder_diameter','holder_diameter','holder_flange_diameter','rack_gripper_gap'),f'Rack slots need at least {separation:g} mm separation for carriers and the selected rack design.')
                 break
         slots=range(self.first_electrode,min(101,self.first_electrode+self.electrodes))
         rack_keys=('rack_radius','rack_start_angle','rack_angle_step') if self.rack_layout=='radial' else ('rack_x','rack_y')

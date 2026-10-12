@@ -5,6 +5,9 @@ sys.path.insert(0,str(Path(__file__).resolve().parent.parent))
 from PySide6.QtWidgets import QApplication,QMessageBox
 from PySide6.QtGui import QImage,QColor
 from electrobot.app import Window,STYLE
+import electrobot.app as app_module
+session=tempfile.TemporaryDirectory()
+root_patch=patch.object(app_module,'ROOT',Path(session.name)); root_patch.start()
 warnings=[]
 QMessageBox.warning=lambda *args: warnings.append(args[-1])
 app=QApplication([]); app.setStyle('Fusion'); app.setStyleSheet(STYLE)
@@ -112,4 +115,5 @@ while w.worker.isRunning() and time.monotonic()<deadline:
     app.processEvents(); time.sleep(.01)
 app.processEvents(); assert not w.worker.isRunning()
 assert not warnings,warnings
+root_patch.stop(); session.cleanup()
 print('UI: layout, shared camera, manual jog/grip/teach, batch, pause/stop, profile roundtrip, mode isolation and shutdown passed')

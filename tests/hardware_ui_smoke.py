@@ -9,6 +9,9 @@ from electrobot.app import Window,STYLE
 from electrobot.drivers import DobotRobot,PalmSensPotentiostat
 from test_drivers import FakeArm,FakeSDK
 import electrobot.worker as worker_module
+import electrobot.app as app_module
+session=tempfile.TemporaryDirectory()
+root_patch=patch.object(app_module,'ROOT',Path(session.name)); root_patch.start()
 app=QApplication([]); app.setStyle('Fusion'); app.setStyleSheet(STYLE)
 warnings=[]; QMessageBox.warning=lambda *args:warnings.append(args[-1])
 w=Window(); w.show()
@@ -67,4 +70,5 @@ with tempfile.TemporaryDirectory() as d,patch.object(worker_module,'DobotRobot',
 w.close(); deadline=time.monotonic()+3
 while w.worker.isRunning() and time.monotonic()<deadline: app.processEvents(); time.sleep(.01)
 assert not w.worker.isRunning(); assert not warnings,warnings
+root_patch.stop(); session.cleanup()
 print('Hardware UI: explicit connection/home, real adapter batch, raw-value export, readiness invalidation and held-electrode disconnect/close guards passed (mock devices)')

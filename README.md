@@ -40,7 +40,7 @@ Live robot tracking appears above the electrode queue on Experiment and beside t
 
 For a robot-only rehearsal, disconnect the WE lead from an independently controlled potentiostat. An app-connected potentiostat is commanded cell-off before movement and during cleanup, but is never asked to measure. Rehearsals save settings, events and a summary marked `robot_rehearsal`; they create no electrochemistry CSV or synthetic CV data.
 
-The main page includes batch name, first rack slot, number of electrodes, CV cycle count, start/end and vertex potentials, scan rate, settling time, and rinse settings. It also contains device connection status, start/stop controls, per-electrode progress, a CV plot, a compact camera preview with snapshots, and the activity log. The lower workspace has three resizable columns: a compact CV plot, camera/activity, and the electrode queue on the right. Drag the dividers to adjust their widths.
+The main page includes batch name, first rack slot, number of electrodes, CV cycle count, start/end and vertex potentials, scan rate, settling time, and rinse settings. It also contains device connection status, start/stop controls, per-electrode progress, a CV plot, a compact camera preview with snapshots, and the activity log. The right column starts alongside the experiment settings and contains the taller live robot view and electrode queue. The lower-left area holds the CV plot and camera/activity in resizable columns. Drag the dividers to adjust their widths.
 
 The camera is independent of robot/potentiostat mode: a real camera can be used during a simulated batch. No pickup detection or camera-based recovery is implemented yet.
 
@@ -58,7 +58,7 @@ Hardware connection does not home, move, or actuate the gripper. Homing is expli
 
 ## Settings and lab commissioning
 
-Settings groups persistent design and calibration parameters into Devices, Measurement defaults, Robot calibration, Workspace, and Cell & carrier tabs. Configurations save to `settings.json` and can be loaded from JSON. Profiles never connect hardware or change the selected mode automatically; every app session starts in Simulation.
+Settings groups persistent design and calibration parameters into Devices, Measurement defaults, Robot calibration, Workspace, Cell & carrier, and Rack design tabs. Configurations save to `settings.json` and can be loaded from JSON. Profiles never connect hardware or change the selected mode automatically; every app session starts in Simulation.
 
 Robot calibration includes **Compact rehearsal from current pose**. With an idle connected robot (homed in hardware mode and commanded open), this reads a fresh pose without motion and anchors rack slot 1 to it. Cell is +10 mm X, rinse is +10 mm X/+10 mm Y, and travel Z is +5 mm; tool R is preserved. It selects one electrode, one 0.5 s rinse dip, 1 s settling and velocity/acceleration settings of 10. Calibration and fixture readiness are cleared. An incompatible preset is rejected without changing any settings; move manually to a verified clear intermediate pose and try again. Use only with an empty gripper initially.
 
@@ -118,6 +118,18 @@ The [`cad/radial-example`](cad/radial-example) folder contains the original mono
 
 ## Verification
 
+From the project folder, run all software checks using the project script:
+
+```sh
+python scripts/check_project.py
+# Shorter check without UI or screenshot regeneration:
+python scripts/check_project.py --unit-only
+```
+
+The script uses the project's `.venv` when present, sets Qt to offscreen, and runs the unit suite plus simulation and mocked-hardware UI checks. No physical device is used. UI checks use temporary settings/output directories, so saved lab calibration is not read or changed; they refresh screenshots under `cad/` for review.
+
+The individual commands remain available:
+
 ```sh
 python -m unittest discover -s tests -v
 # macOS / Linux
@@ -128,5 +140,13 @@ QT_QPA_PLATFORM=offscreen python tests/hardware_ui_smoke.py
 ```
 
 Tests cover sequence/data retention, SDK parameter/unit mapping, abort/cell-off, robot completion/tolerance/cancellation, selection ambiguity, hardware preflight, camera search/disconnection, and cap mesh validity. An additional hardware UI smoke run uses the real adapters with mock devices. UI smoke checks cover the workspace, manual control and teaching, settings persistence, mode isolation, pause/stop and shutdown. Hardware behaviour still needs physical commissioning.
+
+## Development guidance
+
+- [AGENTS.md](AGENTS.md): working conventions, behavioral constraints and the confirmed Git workflow.
+- [Architecture](docs/ARCHITECTURE.md): module responsibilities, coordinate contracts and where to make common changes.
+- [Project status](docs/PROJECT_STATUS.md): implemented capabilities, physical evidence, provisional dimensions and open design decisions.
+
+Keep these documents current when behavior or commissioning evidence changes. Local calibration (`settings.json`) and measurement output (`runs/`) stay outside Git; committed profiles and CAD are explicitly labelled examples.
 
 Sources: [Dobot library API/source](https://github.com/mslopgk/dobotkit), [PalmSens Python SDK installation](https://dev.palmsens.com/python/latest/_attachments/installation/), [PalmSens CV](https://sdk.palmsens.com/python/latest/_attachments/reference/methods/cyclic_voltammetry/), [PalmSens instrument management](https://sdk.palmsens.com/python/latest/_attachments/reference/instrument_async/), [EmStat4S specifications](https://assets.palmsens.com/product/emstat4s/), [OpenCV VideoCapture](https://docs.opencv.org/4.5.5/d8/dfe/classcv_1_1VideoCapture.html).

@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+<rect width="1200" height="760" fill="#f4f8fa"/>
+<style>text{font-family:Arial,sans-serif;fill:#234452;font-size:19px}.title{font-size:28px;font-weight:bold}.small{font-size:16px}.rack{fill:#a8ded6;stroke:#087f73;stroke-width:2}.collar{fill:#d8d2ed;stroke:#6557a2;stroke-width:2}.line{fill:none;stroke:#234452;stroke-width:2}</style>
+<text x="35" y="45" class="title">Collar-supported open rack — proposed geometry</text>
+<text x="35" y="76">Supports the pickup collar; the electrode rod and active tip hang freely.</text>
+<text x="35" y="125" class="title">Side section · one station</text>
+<!-- Electrode rod and tip; collar cutaway shows insertion into the existing holder. -->
+<rect x="260" y="258" width="24" height="281" fill="#c6cbd0" stroke="#50616c" stroke-width="2"/>
+<rect x="260" y="518" width="24" height="21" fill="#343b42"/>
+<!-- Raised open deck with 7 mm clearance opening through its centre. -->
+<path class="rack" d="M105 300H233V307H258V329H105Z M286 307H311V300H329V329H286Z"/>
+<rect class="rack" x="108" y="329" width="20" height="256"/>
+<rect class="rack" x="309" y="329" width="20" height="256"/>
+<rect class="rack" x="84" y="585" width="69" height="14" rx="3"/>
+<rect class="rack" x="284" y="585" width="70" height="14" rx="3"/>
+<!-- Provisional holder: 18 mm body, top flange 24 mm, bottom seated shallowly. -->
+<path class="collar" d="M236 251H308V307H286V258H258V307H236Z"/>
+<rect class="collar" x="224" y="239" width="96" height="12"/>
+<rect x="256" y="236" width="32" height="4" fill="#cf9652"/>
+<path class="line" d="M321 241H375L396 214"/>
+<text x="338" y="177">Top contact pad stays accessible</text>
+<text x="338" y="201" class="small">24 mm flange remains above the seat</text>
+<path class="line" d="M309 280H388"/>
+<text x="397" y="276">Exposed grip body</text>
+<text x="397" y="300" class="small">18 mm Ø × ~12.5 mm exposed</text>
+<path class="line" d="M311 307L370 349"/>
+<text x="344" y="373">Shallow locating recess</text>
+<text x="344" y="397" class="small">18.4 mm Ø × 1.5 mm deep</text>
+<path class="line" d="M284 423H356"/>
+<text x="365" y="431">6 mm rod through ~7 mm opening</text>
+<path class="line" d="M284 528L345 558"/>
+<text x="344" y="567">Active tip touches nothing</text>
+<text x="35" y="638">Deck height = rod length below collar + bottom clearance.</text>
+<text x="35" y="666" class="small">Example: 50 mm hanging length + 10 mm clearance = 60 mm seat height.</text>
+<text x="35" y="695" class="small">Legs stay outside the rod paths. Feet or clamps fix the rack to the bench.</text>
+<!-- top view: six interconnected annular seats along a curved grid -->
+<text x="705" y="125" class="title">Top view · radial lattice</text>
+<g fill="none" stroke="#087f73" stroke-width="12" stroke-linecap="round">
+<path d="M765 240Q908 210 1050 280 M738 355Q904 322 1072 405"/>
+<path d="M765 240L738 355 M906 240L903 365 M1050 280L1072 405"/>
+</g>
+<g class="rack">
+<circle cx="765" cy="240" r="34"/><circle cx="906" cy="240" r="34"/><circle cx="1050" cy="280" r="34"/>
+<circle cx="738" cy="355" r="34"/><circle cx="903" cy="365" r="34"/><circle cx="1072" cy="405" r="34"/>
+</g>
+<g fill="#f4f8fa" stroke="#087f73" stroke-width="2">
+<circle cx="765" cy="240" r="12"/><circle cx="906" cy="240" r="12"/><circle cx="1050" cy="280" r="12"/>
+<circle cx="738" cy="355" r="12"/><circle cx="903" cy="365" r="12"/><circle cx="1072" cy="405" r="12"/>
+</g>
+<g fill="none" stroke="#6557a2" stroke-width="2" stroke-dasharray="5 4">
+<circle cx="765" cy="240" r="28"/><circle cx="906" cy="240" r="28"/><circle cx="1050" cy="280" r="28"/>
+<circle cx="738" cy="355" r="28"/><circle cx="903" cy="365" r="28"/><circle cx="1072" cy="405" r="28"/>
+</g>
+<text x="705" y="492">Annular seats joined by narrow ribs</text>
+<text x="705" y="523">No full plate; no tall individual sockets</text>
+<text x="705" y="554">Dashed circles: collar locating recesses</text>
+<text x="705" y="595" class="small">Start with 30–35 mm centres for a fit trial.</text>
+<text x="705" y="619" class="small">Final pitch depends on the open finger envelope.</text>
+<text x="705" y="665" class="small">Concept only. Dimensions are provisional.</text>
+<text x="705" y="689" class="small">Existing collar still needs physical grip/retention checks.</text>
+<text x="35" y="739" class="small">Section and top view are explanatory, not manufacturing drawings. Collar, rod and electrical contact are separate components.</text>
+</svg>

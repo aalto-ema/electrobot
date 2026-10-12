@@ -64,11 +64,11 @@ class DeviceWorker(QThread):
                     self.pot.connect(); self.pot_connected=True
                 elif command=='disconnect':
                     self.close_devices()
-                elif command=='run':
-                    if not self.robot_connected or not self.pot_connected:
-                        raise RuntimeError('Connect both the robot and potentiostat before starting a batch')
+                elif command in ('run','rehearse'):
+                    if not self.robot_connected or (command=='run' and not self.pot_connected):
+                        raise RuntimeError('Connect the robot before rehearsal' if command=='rehearse' else 'Connect both the robot and potentiostat before starting a batch')
                     folder,status=Experiment(s,control,self.event.emit,self.point.emit,self.output,
-                        self.robot,self.pot).run()
+                        self.robot,self.pot if self.pot_connected else None,rehearsal=command=='rehearse').run()
                     self.result.emit(str(folder),status)
                 else:
                     if not self.robot_connected: raise RuntimeError('Connect the robot first')
@@ -89,7 +89,7 @@ class DeviceWorker(QThread):
                     except Exception as exc: message+=f'; stop failed: {exc}'
             except Exception as exc:
                 ok=False; message=str(exc)
-                if command in ('home','move','jog','grip','run') and self.robot_connected:
+                if command in ('home','move','jog','grip','run','rehearse') and self.robot_connected:
                     try: self.robot.stop()
                     except Exception as cleanup: message+=f'; stop failed: {cleanup}'
             finally:

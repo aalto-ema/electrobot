@@ -34,6 +34,10 @@ On the Windows lab computer:
 
 ## Experiment workspace
 
+**Robot rehearsal** runs the same pickup → seat/release in cell → retrieve → rinse → return sequence without CV or a required potentiostat connection. It actively opens/closes the gripper, so it can be used with an empty rack for a movement check or with dummy carriers to test handling. Use one electrode initially. The configured settling time is the brief stand-in wait at the cell; CV duration is omitted. Rinse settings and robot speed still apply. Hardware requires connection, explicit homing and verified calibration/fixture flags just like a batch. Stop remains available. The rehearsal follows the current release-in-cell workflow, not the future hold-during-CV design.
+
+For a robot-only rehearsal, disconnect the WE lead from an independently controlled potentiostat. An app-connected potentiostat is commanded cell-off before movement and during cleanup, but is never asked to measure. Rehearsals save settings, events and a summary marked `robot_rehearsal`; they create no electrochemistry CSV or synthetic CV data.
+
 The main page includes batch name, first rack slot, number of electrodes, CV cycle count, start/end and vertex potentials, scan rate, settling time, and rinse settings. It also contains device connection status, start/stop controls, per-electrode progress, a CV plot, a compact camera preview with snapshots, and the activity log. The lower workspace has three resizable columns: a compact CV plot, camera/activity, and the electrode queue on the right. Drag the dividers to adjust their widths.
 
 The camera is independent of robot/potentiostat mode: a real camera can be used during a simulated batch. No pickup detection or camera-based recovery is implemented yet.

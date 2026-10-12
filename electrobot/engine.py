@@ -62,20 +62,22 @@ class SimPotentiostat:
             point(t,e,current)
 
 class Experiment:
-    def __init__(self,s,control,event,point,output=Path('runs'),robot=None,potentiostat=None):
+    def __init__(self,s,control,event,point,output=Path('runs'),robot=None,potentiostat=None,rehearsal=False):
+        self.rehearsal=rehearsal
         self.s=s.validate(); self.control=control; self.event=event; self.point=point
         self.output=Path(output); self.robot=robot; self.potentiostat=potentiostat
     def run(self):
         s=self.s.validate_batch()
-        if s.mode=='hardware' and (self.robot is None or self.potentiostat is None):
+        if s.mode=='hardware' and (self.robot is None or (not self.rehearsal and self.potentiostat is None)):
             raise RuntimeError('Hardware requires connected robot and potentiostat; simulation fallback is disabled')
-        robot=self.robot or SimRobot(s,self.control); pot=self.potentiostat or SimPotentiostat(s)
+        robot=self.robot or SimRobot(s,self.control)
+        pot=self.potentiostat if self.rehearsal else (self.potentiostat or SimPotentiostat(s))
         robot.s=s; robot.control=self.control
         if s.mode=='hardware' and robot.holding:
             raise RuntimeError('Secure/release the held electrode before a new hardware batch')
         if s.mode=='hardware' and not robot.homed:
             raise RuntimeError('Home the robot before starting a hardware batch')
-        pot.validate_protocol(s)  # Fail before any movement if the method is incompatible.
+        if not self.rehearsal: pot.validate_protocol(s)  # Fail before any movement if the method is incompatible.
         if s.mode=='hardware':
             initial=robot.pose()
             s.validate_pose(tuple(initial[k] for k in ('x','y','z','r')))
@@ -96,7 +98,8 @@ class Experiment:
             robot.move((x,y,s.safe_z)); robot.move((x,y,z))
         def lift(x,y): robot.move((x,y,s.safe_z))
         try:
-            pot.cell_off()
+            if pot is not None: pot.cell_off()
+            if self.rehearsal: emit('rehearsal','Robot-only rehearsal: gripper actuates; no measurement or electrochemistry data')
             robot.grip(False)
             for electrode in range(s.first_electrode,s.first_electrode+s.electrodes):
                 self.control.check()
@@ -106,14 +109,17 @@ class Experiment:
                 emit('insert','Seating carrier in the cell fixture')
                 travel(s.cell_x,s.cell_y,s.cell_z); robot.grip(False); lift(s.cell_x,s.cell_y)
                 self.control.wait(s.settle/speed)
-                emit('measure','Running '+('synthetic' if synthetic else 'hardware')+' cyclic voltammetry')
-                with (folder/f'electrode-{electrode:03d}.csv').open('w',newline='') as f:
-                    writer=csv.writer(f); writer.writerow(['time_s','potential_V','current_uA','synthetic','time_source'])
-                    def sample(t,e,i):
-                        if not all(math.isfinite(v) for v in (t,e,i)): raise ValueError('Potentiostat returned non-finite data')
-                        writer.writerow([t,e,i,synthetic,'protocol' if synthetic else 'nominal_cv_step']); f.flush(); self.point(electrode,t,e,i)
-                    pot.measure(s,electrode,self.control,sample,stream=folder/f'electrode-{electrode:03d}-sdk.jsonl' if not synthetic else None)
-                pot.cell_off()
+                if self.rehearsal:
+                    emit('wait','Measurement omitted in robot-only rehearsal')
+                else:
+                    emit('measure','Running '+('synthetic' if synthetic else 'hardware')+' cyclic voltammetry')
+                    with (folder/f'electrode-{electrode:03d}.csv').open('w',newline='') as f:
+                        writer=csv.writer(f); writer.writerow(['time_s','potential_V','current_uA','synthetic','time_source'])
+                        def sample(t,e,i):
+                            if not all(math.isfinite(v) for v in (t,e,i)): raise ValueError('Potentiostat returned non-finite data')
+                            writer.writerow([t,e,i,synthetic,'protocol' if synthetic else 'nominal_cv_step']); f.flush(); self.point(electrode,t,e,i)
+                        pot.measure(s,electrode,self.control,sample,stream=folder/f'electrode-{electrode:03d}-sdk.jsonl' if not synthetic else None)
+                    if pot is not None: pot.cell_off()
                 emit('retrieve','Retrieving carrier after cell disconnect')
                 travel(s.cell_x,s.cell_y,s.cell_z); robot.grip(True); lift(s.cell_x,s.cell_y)
                 for dip in range(s.rinse_dips):
@@ -132,11 +138,12 @@ class Experiment:
             if status!='completed':
                 try: robot.stop()
                 except Exception as exc: cleanup_errors.append(f'Robot stop failed: {exc}')
-            try: pot.cell_off()
+            try:
+                if pot is not None: pot.cell_off()
             except Exception as exc: cleanup_errors.append(f'Cell off failed: {exc}')
             for error in cleanup_errors: emit('cleanup_error',error)
             if cleanup_errors: status='failed'
             (folder/'events.json').write_text(json.dumps(log,indent=2))
-            (folder/'summary.json').write_text(json.dumps({'mode':s.mode,'status':status,'run_name':s.run_name,'cleanup_errors':cleanup_errors,
+            (folder/'summary.json').write_text(json.dumps({'run_type':'robot_rehearsal' if self.rehearsal else 'experiment','measurement_performed':not self.rehearsal,'mode':s.mode,'status':status,'run_name':s.run_name,'cleanup_errors':cleanup_errors,
                  'grip_state_is_commanded':True,'holding_electrode':robot.holding,'last_electrode':electrode},indent=2))
         return folder,status

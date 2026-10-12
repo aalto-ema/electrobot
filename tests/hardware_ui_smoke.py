@@ -23,10 +23,15 @@ with tempfile.TemporaryDirectory() as d,patch.object(worker_module,'DobotRobot',
     w.mode.setCurrentIndex(1); idle()
     assert not w.device_state['robot'] and not w.device_state['potentiostat']
     w.submit('connect_robot'); idle(); assert w.device_state['robot'] and not w.device_state['homed']
-    w.submit('connect_potentiostat'); idle(); assert w.device_state['potentiostat']
     w.submit('home'); idle(); assert w.device_state['homed']
     w.fields['electrodes'].setValue(1); w.fields['settle'].setValue(0); w.fields['rinse_dwell'].setValue(0); w.fields['grip_dwell'].setValue(.1)
     w.fields['calibrated'].setChecked(True); w.fields['fixture_verified'].setChecked(True)
+    w.refresh_controls(); assert w.rehearse.isEnabled() and not w.start.isEnabled()
+    w.rehearse.click(); idle(); assert w.state.text()=='Completed'
+    assert not w.device_state['potentiostat']
+    assert not list(w.output.glob('*.csv'))
+    assert json.loads((w.output/'summary.json').read_text())['run_type']=='robot_rehearsal'
+    w.submit('connect_potentiostat'); idle(); assert w.device_state['potentiostat']
     w.start_run(); idle(); assert w.state.text()=='Completed'
     summary=json.loads((w.output/'summary.json').read_text()); assert summary['mode']=='hardware'
     assert 'False,nominal_cv_step' in (w.output/'electrode-001.csv').read_text()

@@ -152,7 +152,8 @@ class Window(QMainWindow):
             setup.addWidget(group,1)
         l.addWidget(self.setup_box)
         actions=QHBoxLayout(); self.start=button('▶  Start batch',self.start_run,True); self.pause=button('Pause',self.pause_run); self.stop=button('Stop',self.stop_run); self.stop.setObjectName('danger')
-        actions.addWidget(self.start); actions.addWidget(self.pause); actions.addWidget(self.stop); self.state=QLabel('Ready'); self.state.setObjectName('metric'); actions.addWidget(self.state); actions.addStretch()
+        self.rehearse=button('Robot rehearsal',lambda:self.start_run(rehearsal=True))
+        actions.addWidget(self.start); actions.addWidget(self.rehearse); actions.addWidget(self.pause); actions.addWidget(self.stop); self.state=QLabel('Ready'); self.state.setObjectName('metric'); actions.addWidget(self.state); actions.addStretch()
         self.progress=QProgressBar(); self.progress.setFixedWidth(180); self.progress.setRange(0,self.s.electrodes); self.progress.setValue(0); actions.addWidget(self.progress)
         actions.addWidget(button('Run folder',self.open_output)); l.addLayout(actions)
         self.main_split=QSplitter(Qt.Orientation.Horizontal)
@@ -264,6 +265,8 @@ class Window(QMainWindow):
         ready=not hardware or (d.get('homed',False) and self.fields['calibrated'].isChecked() and self.fields['fixture_verified'].isChecked())
         self.start.setEnabled(idle and ready and not d.get('holding',False) and d.get('robot',False) and d.get('potentiostat',False))
         self.start.setToolTip('Hardware: connect both devices, home the robot, and verify calibration and the fixture in Settings.')
+        self.rehearse.setEnabled(idle and ready and not d.get('holding',False) and d.get('robot',False))
+        self.rehearse.setToolTip('Run pickup, release in cell, rinse and return with the gripper active; no potentiostat required. Uses settling time as the brief cell wait.')
         self.pause.setEnabled(self.running_batch and not hardware and not self._close_pending)
         self.stop.setEnabled(self.busy); self.manual_stop.setEnabled(self.busy or idle and d.get('robot',False))
         self.connect_robot.setEnabled(idle and not d.get('robot',False)); self.connect_pot.setEnabled(idle and not d.get('potentiostat',False)); self.disconnect.setEnabled(idle and (d.get('robot',False) or d.get('potentiostat',False)))
@@ -281,7 +284,7 @@ class Window(QMainWindow):
         for row,index in enumerate(range(first,first+count)):
             for col,text in enumerate((str(index),f'WE {index:02d}','Queued')):
                 self.queue_table.setItem(row,col,QTableWidgetItem(text))
-    def start_run(self):
+    def start_run(self,rehearsal=False):
         if self.busy: return
         try:
             s=self.read_settings().validate_batch()
@@ -294,7 +297,7 @@ class Window(QMainWindow):
             self.plot_selection.addItem(f'Electrode {index}',index)
             for col,text in enumerate((str(index),f'WE {index:02d}','Queued')): self.queue_table.setItem(row,col,QTableWidgetItem(text))
         self.plot.update(); self.log.clear(); self.progress.setRange(0,s.electrodes); self.progress.setValue(0)
-        self.running_batch=True; self.paused=False; self.pause.setText('Pause'); self.state.setText('Starting…'); self.submit('run')
+        self.running_batch=True; self.paused=False; self.pause.setText('Pause'); self.state.setText('Starting…'); self.submit('rehearse' if rehearsal else 'run')
     def select_plot(self):
         if hasattr(self,'plot'): self.plot.selected=self.plot_selection.currentData(); self.plot.update()
     def on_event(self,event):
@@ -309,12 +312,12 @@ class Window(QMainWindow):
     def on_completed(self,command,ok,message):
         if command=='shutdown': self.statusBar().showMessage(message); return
         self.busy=False
-        if command=='run': self.running_batch=False
+        if command in ('run','rehearse'): self.running_batch=False
         if not ok:
             self.log.appendPlainText(message); self.statusBar().showMessage(message)
-            if command=='run': self.state.setText('Stopped' if message=='Stopped' else 'Failed')
+            if command in ('run','rehearse'): self.state.setText('Stopped' if message=='Stopped' else 'Failed')
             if not self._close_pending and message!='Stopped': QMessageBox.warning(self,'Device operation stopped',message)
-        elif command!='run': self.statusBar().showMessage(command.replace('_',' ').capitalize()+' completed')
+        elif command not in ('run','rehearse'): self.statusBar().showMessage(command.replace('_',' ').capitalize()+' completed')
         self.refresh_controls()
     def on_pose(self,pose):
         self.current_pose=dict(pose); self.pose_label.setText('    '.join(f'{k.upper()} {pose[k]:.2f}' for k in ('x','y','z','r')))

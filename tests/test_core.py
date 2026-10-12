@@ -6,9 +6,37 @@ import time
 import unittest
 from pathlib import Path
 from electrobot.config import Settings
-from electrobot.engine import Experiment,Control,Cancelled
+from electrobot.engine import Experiment,Control,Cancelled,SimRobot
 
 class CoreTests(unittest.TestCase):
+    def test_robot_rehearsal_without_potentiostat(self):
+        with tempfile.TemporaryDirectory() as d:
+            s=Settings(mode='hardware',calibrated=True,fixture_verified=True,electrodes=1,settle=0,rinse_dwell=0)
+            c=Control(); robot=SimRobot(s,c); grips=[]
+            original=robot.grip
+            robot.grip=lambda closed:(grips.append(closed),original(closed))
+            # Keep the hardware timing path without waiting on a mock movement.
+            robot.move=lambda pose:setattr(robot,'current_pose',dict(zip(('x','y','z','r'),(*pose[:3],s.tool_r))))
+            events=[]
+            folder,status=Experiment(s,c,events.append,lambda *a:self.fail('Rehearsal emitted measurement data'),d,robot=robot,rehearsal=True).run()
+            self.assertEqual(status,'completed')
+            self.assertEqual(grips,[False,True,False,True,False])
+            self.assertFalse(list(folder.glob('*.csv')))
+            self.assertIn('wait',[e['state'] for e in events])
+            summary=json.loads((folder/'summary.json').read_text())
+            self.assertEqual(summary['run_type'],'robot_rehearsal')
+            self.assertFalse(summary['measurement_performed'])
+
+    def test_rehearsal_never_calls_measurement(self):
+        class Pot:
+            def cell_off(self): pass
+            def validate_protocol(self,s): raise AssertionError('Method validation called')
+            def measure(self,*a,**kw): raise AssertionError('Measurement called')
+        with tempfile.TemporaryDirectory() as d:
+            s=Settings(electrodes=1,simulation_speed=10000,settle=0,rinse_dwell=0)
+            _,status=Experiment(s,Control(),lambda e:None,lambda *a:None,d,potentiostat=Pot(),rehearsal=True).run()
+            self.assertEqual(status,'completed')
+
     def test_cv_timing_and_vertices(self):
         s=Settings().validate(); points=s.potential_points()
         self.assertAlmostEqual(points[-1][0],40)

@@ -19,6 +19,7 @@ assert 'pypalmsens' not in sys.modules and 'dobotkit' not in sys.modules
 assert w.read_settings().electrodes==3
 assert w.fields['scan_rate'].isVisible()
 assert w.preview.isVisible()
+assert w.calibration_diagram.workspace and w.workspace_diagram.workspace
 assert not w.fields['rack_pitch'].isVisible()
 for i in range(3):
     w.nav.setCurrentRow(i); app.processEvents(); w.grab().save(str(Path('cad')/f'ui-{i}.png'))

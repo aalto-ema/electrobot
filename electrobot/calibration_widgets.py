@@ -71,6 +71,8 @@ class CalibrationDiagram(QWidget):
             text(20,334,f'X [{s.workspace_x_min:g}, {s.workspace_x_max:g}]   Y [{s.workspace_y_min:g}, {s.workspace_y_max:g}] mm')
             text(20,356,f'Radius [{s.workspace_radius_min:g}, {s.workspace_radius_max:g}] mm from base')
             text(20,378,'Allowed XY = rectangle ∩ radial band')
+            columns,rows,_=rack_layout(s)
+            text(510,334,f'Rack {columns} columns × {rows} rows; pitch {s.rack_pitch:g} mm')
         else:
             columns,rows,_=rack_layout(s)
             text(20,334,f'{columns} columns × {rows} rows; pitch {s.rack_pitch:g} mm; order +X then +Y')

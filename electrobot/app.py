@@ -275,7 +275,7 @@ class Window(QMainWindow):
         self.preset_button=button('Compact rehearsal from current pose',self.compact_rehearsal_preset,True); robot.addWidget(self.preset_button)
         robot.addWidget(self.note('Empty-gripper preset: read the live pose, use it as rack slot 1, offset cell +10 mm X and rinse +10 mm X/+10 mm Y, and set travel Z +5 mm. No movement is commanded. Readiness is cleared.'))
         self.calibration_feedback=self.note(''); robot.addWidget(self.calibration_feedback)
-        self.calibration_diagram=CalibrationDiagram(); robot.addWidget(self.calibration_diagram)
+        self.calibration_diagram=CalibrationDiagram(workspace=True); robot.addWidget(self.calibration_diagram)
         row=QHBoxLayout()
         row.addWidget(self.settings_group('Rack (mm)', [('rack_columns','Columns',1,20),('rack_pitch','Slot pitch'),('rack_x','First slot X',-400,400),('rack_y','First slot Y',-400,400),('rack_z','Gripping Z',-100,300),('safe_z','Travel Z',-100,300)]))
         row.addWidget(self.settings_group('Stations (mm)', [('cell_x','Cell X',-400,400),('cell_y','Cell Y',-400,400),('cell_z','Cell seating Z',-100,300),('rinse_x','Rinse X',-400,400),('rinse_y','Rinse Y',-400,400),('rinse_z','Rinse dipping Z',-100,300),('tool_r','Carrier rotation (°)',-90,90)])); robot.addLayout(row)

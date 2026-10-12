@@ -56,6 +56,20 @@ with tempfile.TemporaryDirectory() as d:
     w.fields['electrodes'].setValue(1)
     with patch.object(module.QFileDialog,'getOpenFileName',return_value=(str(path),'JSON')): w.load()
     assert w.fields['electrodes'].value()==3
+    w.fields['rack_layout'].setCurrentIndex(1)
+    assert w.read_settings().rack_layout=='radial'
+    assert not w.fields['rack_x'].isEnabled() and w.fields['rack_radius'].isEnabled()
+    import math
+    w.teach_station.setCurrentIndex(0); w.teach_pose()
+    assert abs(w.fields['rack_radius'].value()-math.hypot(w.current_pose['x'],w.current_pose['y']))<.01
+    w.fields['safe_z'].setValue(w.current_pose['z']+5)
+    w.nav.setCurrentRow(2); w.settings_tabs.setCurrentIndex(2); app.processEvents()
+    w.grab().save('cad/ui-radial-settings.png')
+    with patch.object(module.QFileDialog,'getSaveFileName',return_value=(str(Path(d)/'placement.pdf'),'PDF')): w.export_placement()
+    assert Path(d,'placement.pdf').read_bytes().startswith(b'%PDF')
+    with patch.object(module.QFileDialog,'getExistingDirectory',return_value=d): w.export_rack()
+    assert Path(d,'electrode_rack.stl').exists() and Path(d,'rack_manifest.json').exists()
+    w.fields['rack_layout'].setCurrentIndex(0); w.nav.setCurrentRow(0)
 # Hardware mode must not implicitly connect, home or move either device.
 w.mode.setCurrentIndex(1); idle(); assert not w.device_state['robot'] and not w.device_state['potentiostat']
 assert not w.start.isEnabled() and not w.device_state['homed']

@@ -37,6 +37,8 @@ class CalibrationDiagram(QWidget):
             p.setPen(QPen(QColor(color),1.5)); p.setBrush(QColor(color) if filled else Qt.BrushStyle.NoBrush)
             p.drawEllipse(QPointF(x,y),radius,radius); p.setBrush(Qt.BrushStyle.NoBrush)
         text(20,25,'TOP VIEW · actual robot XY coordinates'); text(510,25,'SIDE VIEW · actual Z heights')
+        if s.rack_layout=='radial':
+            text(20,45,f'Arc r={s.rack_radius:g} mm; start {s.rack_start_angle:g}°; step {s.rack_angle_step:g}°')
         # Include limits, all displayed rack slots, stations and origin. Equal XY
         # scaling preserves distances and circle shape, even outside the bounds.
         points=rack_points(s)
@@ -72,7 +74,7 @@ class CalibrationDiagram(QWidget):
             text(20,356,f'Radius [{s.workspace_radius_min:g}, {s.workspace_radius_max:g}] mm from base')
             text(20,378,'Allowed XY = rectangle ∩ radial band')
             columns,rows,_=rack_layout(s)
-            text(510,334,f'Rack {columns} columns × {rows} rows; pitch {s.rack_pitch:g} mm')
+            text(510,334,f'{s.rack_layout.title()} rack: {columns} slots/row × {rows}; pitch {s.rack_pitch:g} mm')
         else:
             columns,rows,_=rack_layout(s)
             text(20,334,f'{columns} columns × {rows} rows; pitch {s.rack_pitch:g} mm; order +X then +Y')

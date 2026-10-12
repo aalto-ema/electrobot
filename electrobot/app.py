@@ -44,13 +44,14 @@ class Window(QMainWindow):
         header.addWidget(self.mode); self.badge=QLabel('● SIMULATION'); self.badge.setObjectName('badge'); header.addWidget(self.badge); main.addLayout(header)
         self.pages=QStackedWidget(); main.addWidget(self.pages); shell.addWidget(content)
         self.make_dashboard(); self.make_manual(); self.make_settings()
-        for key in ('rack_x','rack_y','rack_z','rack_pitch','rack_columns','cell_x','cell_y','cell_z',
+        for key in ('rack_x','rack_y','rack_z','rack_pitch','rack_columns','rack_radius','rack_start_angle','rack_angle_step','cell_x','cell_y','cell_z',
                     'rinse_x','rinse_y','rinse_z','safe_z','tool_r',
                     'workspace_x_min','workspace_x_max','workspace_y_min','workspace_y_max',
                     'workspace_z_min','workspace_z_max','workspace_radius_min','workspace_radius_max'):
             self.fields[key].valueChanged.connect(lambda:self.fields['calibrated'].setChecked(False))
+        self.fields['rack_layout'].currentIndexChanged.connect(lambda:self.fields['calibrated'].setChecked(False))
         for key in ('rod_diameter','rod_length','shoulder_diameter','tip_below_shoulder',
-                    'cap_thickness','we_clearance','funnel_diameter'):
+                    'cap_thickness','we_clearance','funnel_diameter','rack_socket_clearance','rack_socket_depth','rack_post_height','rack_socket_wall','rack_base_thickness','rack_margin'):
             self.fields[key].valueChanged.connect(lambda:self.fields['fixture_verified'].setChecked(False))
         for key in ('electrodes','first_electrode'):
             self.fields[key].valueChanged.connect(self.prepare_queue)
@@ -151,7 +152,7 @@ class Window(QMainWindow):
         if pose is None: return
         from dataclasses import replace
         s=replace(self.read_settings(validate=False),run_name='Compact empty-gripper rehearsal',
-            first_electrode=1,electrodes=1,rack_x=pose['x'],rack_y=pose['y'],rack_z=pose['z'],
+            first_electrode=1,electrodes=1,rack_layout='rectangular',rack_x=pose['x'],rack_y=pose['y'],rack_z=pose['z'],
             cell_x=pose['x']+10,cell_y=pose['y'],cell_z=pose['z'],
             rinse_x=pose['x']+10,rinse_y=pose['y']+10,rinse_z=pose['z'],
             safe_z=pose['z']+5,tool_r=pose['r'],robot_velocity=10,robot_acceleration=10,
@@ -261,7 +262,8 @@ class Window(QMainWindow):
         content=QWidget(); layout=QVBoxLayout(content); layout.setSpacing(16); scroll.setWidget(content); self.settings_tabs.addTab(scroll,title); return layout
     def make_settings(self):
         w,l=self.page(); actions=QHBoxLayout(); self.save_button=button('Save configuration',self.save,True); self.load_button=button('Load configuration…',self.load)
-        actions.addWidget(self.save_button); actions.addWidget(self.load_button); actions.addStretch(); l.addLayout(actions)
+        self.placement_export=button('Export placement PDF…',self.export_placement)
+        actions.addWidget(self.save_button); actions.addWidget(self.load_button); actions.addWidget(self.placement_export); actions.addStretch(); l.addLayout(actions)
         self.settings_tabs=QTabWidget(); l.addWidget(self.settings_tabs)
         devices=self.settings_tab('Devices'); devices.addWidget(self.note('Hardware packages: requirements-hardware.txt. Start DobotLink on Windows. PalmSens requires its .NET runtime and USB drivers. Connection changes take effect after disconnect/reconnect.'))
         devices.addWidget(self.settings_group('DobotLink connection', [('robot_port','Robot port (auto / COM…)'),('robot_host','DobotLink host'),('robot_ws_port','WebSocket port',1,65535),('robot_timeout','RPC timeout (s)',1,30)]))
@@ -276,6 +278,10 @@ class Window(QMainWindow):
         robot.addWidget(self.note('Empty-gripper preset: read the live pose, use it as rack slot 1, offset cell +10 mm X and rinse +10 mm X/+10 mm Y, and set travel Z +5 mm. No movement is commanded. Readiness is cleared.'))
         self.calibration_feedback=self.note(''); robot.addWidget(self.calibration_feedback)
         self.calibration_diagram=CalibrationDiagram(workspace=True); robot.addWidget(self.calibration_diagram)
+        layout_group=QGroupBox('Rack layout'); lf=QFormLayout(layout_group)
+        self.combo_field(lf,'rack_layout','Slot arrangement',[('Rectangular grid','rectangular'),('Radial arcs around robot base','radial')]); robot.addWidget(layout_group)
+        robot.addWidget(self.settings_group('Radial layout (mm / degrees)', [('rack_radius','First row radius',1,400),('rack_start_angle','Slot 1 angle (°)',-180,180),('rack_angle_step','Angle between slots (°)',.1,90)]))
+        robot.addWidget(self.note('Radial: Columns means slots per arc row; Slot pitch is the radial distance between rows. Angles start on +X and increase towards +Y. First-slot X/Y apply only to rectangular layouts.'))
         row=QHBoxLayout()
         row.addWidget(self.settings_group('Rack (mm)', [('rack_columns','Columns',1,20),('rack_pitch','Slot pitch'),('rack_x','First slot X',-400,400),('rack_y','First slot Y',-400,400),('rack_z','Gripping Z',-100,300),('safe_z','Travel Z',-100,300)]))
         row.addWidget(self.settings_group('Stations (mm)', [('cell_x','Cell X',-400,400),('cell_y','Cell Y',-400,400),('cell_z','Cell seating Z',-100,300),('rinse_x','Rinse X',-400,400),('rinse_y','Rinse Y',-400,400),('rinse_z','Rinse dipping Z',-100,300),('tool_r','Carrier rotation (°)',-90,90)])); robot.addLayout(row)
@@ -293,6 +299,9 @@ class Window(QMainWindow):
             'rotation_tolerance':'Maximum R angle error accepted after queue completion.',
         }.items(): self.fields[key].setToolTip(tip)
         robot.addWidget(self.settings_group('Hardware batch readiness', [('calibrated','Station poses and paths calibrated'),('fixture_verified','Gripper, seating and dry contact verified')]))
+        robot.addWidget(self.settings_group('Printable rod rack (mm)', [('rack_socket_clearance','Socket diametral clearance',.1,3),('rack_socket_depth','Blind socket depth',1,200),('rack_post_height','Socket post height',2,250),('rack_socket_wall','Socket wall thickness',2,20),('rack_base_thickness','Base thickness',2,30),('rack_margin','Base edge margin',1,30),('rinse_beaker_diameter','Rinse beaker diameter',10,250)]))
+        self.rack_export=button('Export rod rack STL + OpenSCAD…',self.export_rack); robot.addWidget(self.rack_export)
+        robot.addWidget(self.note('Rack export includes complete rows through the last selected slot. Socket depth must exceed the tip length below the carrier shoulder. Choose compatible materials and verify printer-bed dimensions. Bare rods without a shoulder and flag electrodes need a different insert; teach rack Z after fitting the physical rack.'))
         robot.addWidget(self.note('Default coordinates and workspace bounds are placeholders. Position feedback verifies arm pose, not successful pickup or electrical contact. No automatic retry is enabled.')); robot.addStretch()
         bounds=self.settings_tab('Workspace')
         self.workspace_feedback=self.note(''); bounds.addWidget(self.workspace_feedback)
@@ -352,6 +361,10 @@ class Window(QMainWindow):
         for key in ('robot_port','robot_host','robot_ws_port','robot_timeout'):
             self.fields[key].setEnabled(idle and not d.get('robot',False))
         self.fields['potentiostat_id'].setEnabled(idle and not d.get('potentiostat',False))
+        radial=self.fields['rack_layout'].currentData()=='radial'
+        for key in ('rack_radius','rack_start_angle','rack_angle_step'): self.fields[key].setEnabled(idle and radial)
+        for key in ('rack_x','rack_y'): self.fields[key].setEnabled(idle and not radial)
+        self.placement_export.setEnabled(idle); self.rack_export.setEnabled(idle)
         self.setup_box.setEnabled(idle); self.settings_tabs.setEnabled(idle); self.save_button.setEnabled(idle); self.load_button.setEnabled(idle)
         for b in self.manual_buttons: b.setEnabled(idle and d.get('robot',False))
         for b in self.motion_buttons: b.setEnabled(idle and d.get('robot',False) and (not hardware or d.get('homed',False)))
@@ -425,7 +438,13 @@ class Window(QMainWindow):
         if station==3: self.fields['safe_z'].setValue(self.current_pose['z'])
         else:
             prefix=('rack','cell','rinse')[station]
-            for axis in 'xyz': self.fields[f'{prefix}_{axis}'].setValue(self.current_pose[axis])
+            if station==0 and self.fields['rack_layout'].currentData()=='radial':
+                import math
+                self.fields['rack_radius'].setValue(math.hypot(self.current_pose['x'],self.current_pose['y']))
+                self.fields['rack_start_angle'].setValue(math.degrees(math.atan2(self.current_pose['y'],self.current_pose['x'])))
+                self.fields['rack_z'].setValue(self.current_pose['z'])
+            else:
+                for axis in 'xyz': self.fields[f'{prefix}_{axis}'].setValue(self.current_pose[axis])
             self.fields['tool_r'].setValue(self.current_pose['r'])
         self.fields['calibrated'].setChecked(False); self.statusBar().showMessage('Pose copied to Settings; verify the travel route before marking calibrated')
     def open_output(self):
@@ -461,6 +480,28 @@ class Window(QMainWindow):
     def update_sketch(self):
         try: self.sketch.s=self.read_settings(); self.sketch.update()
         except Exception as exc: QMessageBox.warning(self,'Check geometry',str(exc))
+    def export_placement(self):
+        try: s=self.read_settings()
+        except Exception as exc: QMessageBox.warning(self,'Check settings',str(exc)); return
+        name,_=QFileDialog.getSaveFileName(self,'Export placement guide',str(ROOT/'cad'/'placement-guide.pdf'),'PDF (*.pdf)')
+        if name:
+            try:
+                from .placement_pdf import export_placement_pdf
+                export_placement_pdf(s,name); self.statusBar().showMessage('Placement PDF exported: '+name)
+            except Exception as exc: QMessageBox.warning(self,'PDF export failed',str(exc))
+
+    def export_rack(self):
+        try: s=self.read_settings()
+        except Exception as exc: QMessageBox.warning(self,'Check rack geometry',str(exc)); return
+        folder=QFileDialog.getExistingDirectory(self,'Choose rack export folder',str(ROOT/'cad'))
+        if folder:
+            try:
+                from .rack_cad import export_rack
+                path=export_rack(s,folder); meta=json.loads(Path(folder,'rack_manifest.json').read_text())
+                size=[b-a for a,b in zip(*meta['bounds_mm'])]
+                self.statusBar().showMessage(f'Rack exported: {path} | {size[0]:.1f} × {size[1]:.1f} × {size[2]:.1f} mm; check printer bed and teach rack Z.')
+            except Exception as exc: QMessageBox.warning(self,'Rack export failed',str(exc))
+
     def export_cap(self):
         try: s=self.read_settings()
         except Exception as exc: QMessageBox.warning(self,'Check geometry',str(exc)); return

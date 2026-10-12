@@ -33,6 +33,17 @@ class Settings:
     electrodes: int = 3
     rack_columns: int = 5
     rack_pitch: float = 22.0
+    rack_layout: str = 'rectangular'
+    rack_radius: float = 200.0
+    rack_start_angle: float = -25.0
+    rack_angle_step: float = 7.0
+    rack_socket_clearance: float = 0.4
+    rack_socket_depth: float = 60.0
+    rack_post_height: float = 65.0
+    rack_socket_wall: float = 3.0
+    rack_base_thickness: float = 4.0
+    rack_margin: float = 6.0
+    rinse_beaker_diameter: float = 50.0
     rod_diameter: float = 6.0
     rod_length: float = 100.0
     shoulder_diameter: float = 12.0
@@ -77,6 +88,14 @@ class Settings:
     reference_label: str = 'Ag/AgCl (confirm electrolyte)'
 
     def validate(self):
+        if self.rack_layout not in ('rectangular','radial'): raise ValueError('Rack layout must be rectangular or radial')
+        for key in ('rack_radius','rack_angle_step','rack_socket_clearance','rack_socket_depth','rack_post_height','rack_socket_wall','rack_base_thickness','rack_margin','rinse_beaker_diameter'):
+            if not math.isfinite(getattr(self,key)) or getattr(self,key)<=0: raise ValueError(f'{key} must be finite and positive')
+        if self.rack_socket_depth>=self.rack_post_height: raise ValueError('Socket depth must be below post height to leave a floor')
+        if self.rack_socket_depth<=self.tip_below_shoulder: raise ValueError('Rack socket must be deeper than the tip below shoulder to keep the active tip off the floor')
+        if self.rack_socket_wall<2 or self.rack_base_thickness<2: raise ValueError('Rack wall and base must be at least 2 mm')
+        if self.rack_layout=='radial' and (self.rack_columns-1)*self.rack_angle_step>=360:
+            raise ValueError('Radial row must span less than 360 degrees')
         if self.mode not in ('simulation','hardware'):
             raise ValueError('Mode must be simulation or hardware')
         if not 1 <= self.first_electrode <= 100 or self.first_electrode+self.electrodes-1 > 100:
@@ -151,8 +170,19 @@ class Settings:
         return self
 
     def rack_pose(self,index):
+        if self.rack_layout=='radial':
+            radius=self.rack_radius+((index-1)//self.rack_columns)*self.rack_pitch
+            angle=math.radians(self.rack_start_angle+((index-1)%self.rack_columns)*self.rack_angle_step)
+            return (radius*math.cos(angle),radius*math.sin(angle),self.rack_z)
         return (self.rack_x+((index-1)%self.rack_columns)*self.rack_pitch,
                 self.rack_y+((index-1)//self.rack_columns)*self.rack_pitch,self.rack_z)
+
+    def rack_export_positions(self):
+        # Complete rows through the last selected slot; inactive slots remain
+        # available for future batches and match the diagrams.
+        last=self.first_electrode+self.electrodes-1
+        count=min(100,((last+self.rack_columns-1)//self.rack_columns)*self.rack_columns)
+        return [self.rack_pose(i) for i in range(1,count+1)]
 
     def validate_pose(self,pose):
         if len(pose) not in (3,4) or not all(math.isfinite(v) for v in pose):
@@ -180,8 +210,15 @@ class Settings:
             if self.safe_z<=getattr(self,key): add(('safe_z',key),f'Travel Z must be above {label.lower()} Z.')
         if self.rack_pitch<=self.shoulder_diameter+4:
             add(('rack_pitch','shoulder_diameter'),'Slot pitch must exceed shoulder diameter + 4 mm.')
+        positions=self.rack_export_positions()
+        separation=max(self.shoulder_diameter+4,self.rod_diameter+self.rack_socket_clearance+2*self.rack_socket_wall+1)
+        for i,a in enumerate(positions):
+            if any(math.dist(a[:2],b[:2])<separation for b in positions[i+1:]):
+                add(('rack_layout','rack_columns','rack_pitch','rack_radius','rack_angle_step','rack_socket_wall','shoulder_diameter'),f'Rack slots need at least {separation:g} mm separation for carriers and printed sockets.')
+                break
         slots=range(self.first_electrode,min(101,self.first_electrode+self.electrodes))
-        stations=[(f'Rack slot {i}',self.rack_pose(i),('rack_x','rack_y','rack_z','rack_pitch','rack_columns','first_electrode','electrodes')) for i in slots]
+        rack_keys=('rack_radius','rack_start_angle','rack_angle_step') if self.rack_layout=='radial' else ('rack_x','rack_y')
+        stations=[(f'Rack slot {i}',self.rack_pose(i),(*rack_keys,'rack_z','rack_pitch','rack_columns','first_electrode','electrodes')) for i in slots]
         stations.extend((('Cell',(self.cell_x,self.cell_y,self.cell_z),('cell_x','cell_y','cell_z')),('Rinse',(self.rinse_x,self.rinse_y,self.rinse_z),('rinse_x','rinse_y','rinse_z'))))
         for label,pose,keys in stations:
             for axis,value in zip('xyz',pose):

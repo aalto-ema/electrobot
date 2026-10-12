@@ -1,0 +1,327 @@
+{
+  "settings": {
+    "mode": "simulation",
+    "run_name": "Electrode screening",
+    "first_electrode": 1,
+    "robot_host": "localhost",
+    "robot_ws_port": 9090,
+    "robot_velocity": 20.0,
+    "robot_acceleration": 20.0,
+    "robot_timeout": 5.0,
+    "motion_timeout": 30.0,
+    "home_timeout": 60.0,
+    "position_tolerance": 1.0,
+    "rotation_tolerance": 1.0,
+    "tool_r": 0.0,
+    "grip_dwell": 0.7,
+    "workspace_x_min": -300.0,
+    "workspace_x_max": 300.0,
+    "workspace_y_min": -300.0,
+    "workspace_y_max": 300.0,
+    "workspace_z_min": -50.0,
+    "workspace_z_max": 150.0,
+    "workspace_radius_min": 120.0,
+    "workspace_radius_max": 300.0,
+    "calibrated": false,
+    "fixture_verified": false,
+    "potentiostat_id": "",
+    "sdk_timeout": 20.0,
+    "power_frequency": 50,
+    "electrodes": 24,
+    "rack_columns": 8,
+    "rack_pitch": 22.0,
+    "rack_layout": "radial",
+    "rack_radius": 200,
+    "rack_start_angle": -30,
+    "rack_angle_step": 8,
+    "rack_socket_clearance": 0.4,
+    "rack_socket_depth": 60.0,
+    "rack_post_height": 65.0,
+    "rack_socket_wall": 3.0,
+    "rack_base_thickness": 4.0,
+    "rack_margin": 6.0,
+    "rinse_beaker_diameter": 50.0,
+    "rod_diameter": 6.0,
+    "rod_length": 100.0,
+    "shoulder_diameter": 12.0,
+    "tip_below_shoulder": 50.0,
+    "immersion": 15.0,
+    "beaker_diameter": 50.0,
+    "beaker_height": 70.0,
+    "rim_diameter": 53.0,
+    "cap_clearance": 0.8,
+    "cap_wall": 3.0,
+    "cap_thickness": 4.0,
+    "skirt_depth": 6.0,
+    "we_clearance": 0.6,
+    "funnel_diameter": 10.0,
+    "re_hole": 8.0,
+    "ce_hole": 6.0,
+    "port_offset": 14.0,
+    "rinse_dips": 3,
+    "rinse_dwell": 1.0,
+    "settle": 2.0,
+    "safe_z": 80.0,
+    "rack_x": 190.0,
+    "rack_y": -65.0,
+    "rack_z": 15.0,
+    "cell_x": 150,
+    "cell_y": 140,
+    "cell_z": 15.0,
+    "rinse_x": 150,
+    "rinse_y": -150,
+    "rinse_z": 15.0,
+    "start_v": 0.0,
+    "vertex1_v": 0.5,
+    "vertex2_v": -0.5,
+    "end_v": 0.0,
+    "scan_rate": 0.1,
+    "step_v": 0.005,
+    "cycles": 2,
+    "current_range_ua": 100.0,
+    "simulation_speed": 10.0,
+    "camera_index": -1,
+    "robot_port": "auto",
+    "reference_label": "Ag/AgCl (confirm electrolyte)"
+  },
+  "units": "mm",
+  "robot_xy_at_stl_origin": [
+    161.01012124834116,
+    -134.19998810773785
+  ],
+  "slot_robot_xyz": [
+    [
+      173.20508075688775,
+      -99.99999999999999,
+      15.0
+    ],
+    [
+      185.4367709133575,
+      -74.9213186831824,
+      15.0
+    ],
+    [
+      194.0591452551993,
+      -48.38437911993355,
+      15.0
+    ],
+    [
+      198.90437907365467,
+      -20.905692653530693,
+      15.0
+    ],
+    [
+      199.87816540381914,
+      6.979899340500194,
+      15.0
+    ],
+    [
+      196.9615506024416,
+      34.729635533386066,
+      15.0
+    ],
+    [
+      190.2113032590307,
+      61.803398874989476,
+      15.0
+    ],
+    [
+      179.7588092598334,
+      87.67422935781549,
+      15.0
+    ],
+    [
+      192.25763964014538,
+      -110.99999999999999,
+      15.0
+    ],
+    [
+      205.8348157138268,
+      -83.16266373833247,
+      15.0
+    ],
+    [
+      215.40565123327121,
+      -53.706660823126235,
+      15.0
+    ],
+    [
+      220.78386077175668,
+      -23.20531884541907,
+      15.0
+    ],
+    [
+      221.86476359823925,
+      7.7476882679552155,
+      15.0
+    ],
+    [
+      218.62732116871018,
+      38.549895442058535,
+      15.0
+    ],
+    [
+      211.13454661752408,
+      68.60177275123833,
+      15.0
+    ],
+    [
+      199.53227827841508,
+      97.31839458717519,
+      15.0
+    ],
+    [
+      211.31019852340305,
+      -121.99999999999999,
+      15.0
+    ],
+    [
+      226.23286051429614,
+      -91.40400879348253,
+      15.0
+    ],
+    [
+      236.75215721134313,
+      -59.02894252631893,
+      15.0
+    ],
+    [
+      242.6633424698587,
+      -25.504945037307447,
+      15.0
+    ],
+    [
+      243.85136179265936,
+      8.515477195410236,
+      15.0
+    ],
+    [
+      240.29309173497876,
+      42.370155350731004,
+      15.0
+    ],
+    [
+      232.05778997601746,
+      75.40014662748716,
+      15.0
+    ],
+    [
+      219.30574729699677,
+      106.9625598165349,
+      15.0
+    ]
+  ],
+  "slot_local_xy": [
+    [
+      12.195,
+      34.2
+    ],
+    [
+      24.4266,
+      59.2787
+    ],
+    [
+      33.049,
+      85.8156
+    ],
+    [
+      37.8943,
+      113.2943
+    ],
+    [
+      38.868,
+      141.1799
+    ],
+    [
+      35.9514,
+      168.9296
+    ],
+    [
+      29.2012,
+      196.0034
+    ],
+    [
+      18.7487,
+      221.8742
+    ],
+    [
+      31.2475,
+      23.2
+    ],
+    [
+      44.8247,
+      51.0373
+    ],
+    [
+      54.3955,
+      80.4933
+    ],
+    [
+      59.7737,
+      110.9947
+    ],
+    [
+      60.8546,
+      141.9477
+    ],
+    [
+      57.6172,
+      172.7499
+    ],
+    [
+      50.1244,
+      202.8018
+    ],
+    [
+      38.5222,
+      231.5184
+    ],
+    [
+      50.3001,
+      12.2
+    ],
+    [
+      65.2227,
+      42.796
+    ],
+    [
+      75.742,
+      75.171
+    ],
+    [
+      81.6532,
+      108.695
+    ],
+    [
+      82.8412,
+      142.7155
+    ],
+    [
+      79.283,
+      176.5701
+    ],
+    [
+      71.0477,
+      209.6001
+    ],
+    [
+      58.2956,
+      241.1625
+    ]
+  ],
+  "bounds_mm": [
+    [
+      0.0,
+      0.0,
+      0.0
+    ],
+    [
+      95.03380584716797,
+      253.3623504638672,
+      69.0
+    ]
+  ],
+  "watertight": true,
+  "connected_solids": 1,
+  "note": "Print base down. Blind sockets may touch active tips; use dummy rods first. Rack gripping Z must be taught after assembly; it does not determine printed height. No flag-electrode insert yet."
+}

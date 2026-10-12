@@ -100,6 +100,16 @@ The cap has a surrounding locating skirt and open spout notch/vent. The carrier 
 
 Provisional pickup-collar and three-finger probe-bracket STLs are in [`cad/gripper`](cad/gripper/README.md), with editable JSON dimensions and a Python generator. Their mounting geometry has not been fitted to the physical gripper. The measurement checklist, print notes and separate metal components are documented there. The provisional 24 mm flange also requires a larger rack pitch than the current 22 mm default. This design requires a hold-during-CV sequence, which is not yet implemented.
 
+## Placement guide and printable racks
+
+Settings → **Export placement PDF** creates an A4 landscape overview, a complete station/slot coordinate checklist, and tiled **1:1 placement templates**. Print at 100% / Actual size and verify each 50 mm scale line. Trim at tile frames and assemble with tile row increasing along +Y. The guide marks the robot's XY datum and directions, not an unmeasured physical base footprint. Beaker outlines use the entered cell and rinse diameters and assume the cell WE axis is central. Z values are robot tool positions, not heights inferred from the printed rack or bench. Physical clearances and actual tool offsets still require calibration. Export uses Qt's PDF writer, so there is no additional Python dependency.
+
+Settings → Robot calibration → **Rack layout** selects rectangular or radial geometry. In radial mode, First row radius and Slot 1 angle are measured about the robot XY origin; positive angles turn from +X toward +Y. Columns means slots per arc row, Angle between slots gives angular spacing, and Slot pitch gives the radial spacing between rows. First-slot X/Y are ignored. Teaching the first rack slot updates radius/angle/Z in radial mode. The compact rehearsal preset returns to rectangular layout. Slot mapping is shared by movement, diagrams, PDF and CAD. Calibration checks include socket/carrier separation; a full row spanning 360 degrees is rejected. Radial racks do not imply collision-free transfers between slots.
+
+**Export rod rack STL + OpenSCAD** creates a connected base with blind upright sockets, plus a manifest that maps local printable coordinates back to robot coordinates. It prints complete rows through the last selected slot, including inactive end-of-row sockets. Change the electrode count/first slot to change rack extent. Socket diameter follows rod diameter plus printing clearance; depth, wall, post height, base thickness and edge margin are adjustable. The first design assumes a carrier shoulder resting on the socket lip, with the active tip suspended above the blind floor. Test with dummy carriers and verify actual seating; a bare rod without a shoulder may rest on its tip. Flag electrodes are not supported yet. Changing rack geometry clears fixture readiness. **Teach gripping Z after assembling the rack**: its tool Z does not determine printable rack height.
+
+The [`cad/radial-example`](cad/radial-example) folder contains a 24-slot, three-row prototype, editable settings, STL, OpenSCAD, manifest and printable guide. Its footprint is approximately **95 × 253 mm**, height **69 mm**; check printer-bed size before slicing. Future larger racks may require modular sections. These are uncommissioned example positions and dimensions, not a lab-ready calibration.
+
 ## Verification
 
 ```sh

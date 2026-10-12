@@ -26,6 +26,7 @@ class DeviceWorker(QThread):
         self.state.emit({'mode':self.mode,'robot':self.robot_connected,'potentiostat':self.pot_connected,
             'homed':bool(self.robot and self.robot.homed),
             'holding':bool(self.robot and self.robot.holding),
+            'gripper_state':self.robot.gripper_state if self.robot_connected else 'unknown',
             'potentiostat_name':self.pot.name if self.pot_connected else 'Disconnected'})
     def close_devices(self):
         errors=[]
@@ -85,6 +86,7 @@ class DeviceWorker(QThread):
                         pose=self.robot.pose(); target=[pose[k] for k in ('x','y','z','r')]
                         axis,delta=payload; target[axis]+=delta; self.robot.move(target)
                     elif command=='grip': self.robot.grip(payload)
+                    elif command=='open_fully': self.robot.open_fully()
                     elif command=='stop': self.robot.stop()
                     else: raise ValueError(f'Unknown command: {command}')
                     if command!='stop': self.robot.pose()
@@ -95,7 +97,7 @@ class DeviceWorker(QThread):
                     except Exception as exc: message+=f'; stop failed: {exc}'
             except Exception as exc:
                 ok=False; message=str(exc)
-                if command in ('home','move','jog','grip','run','rehearse') and self.robot_connected:
+                if command in ('home','move','jog','grip','open_fully','run','rehearse') and self.robot_connected:
                     try: self.robot.stop()
                     except Exception as cleanup: message+=f'; stop failed: {cleanup}'
             finally:

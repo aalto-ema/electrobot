@@ -28,7 +28,7 @@ class Control:
 
 class SimRobot:
     def __init__(self,settings,control):
-        self.s=settings; self.control=control; self.holding=False; self.homed=True
+        self.s=settings; self.control=control; self.holding=False; self.homed=True; self.gripper_state='released'
         self.current_pose={'x':200.0,'y':0.0,'z':80.0,'r':0.0}; self.pose_callback=lambda p:None
     def move(self,pose):
         self.s.validate_pose(pose)
@@ -40,6 +40,9 @@ class SimRobot:
             self.pose_callback(dict(self.current_pose))
     def grip(self,closed):
         self.control.wait(.4/self.s.simulation_speed); self.holding=closed
+        self.gripper_state='closed' if closed else 'released'
+    def open_fully(self):
+        self.control.wait(.4/self.s.simulation_speed); self.holding=False; self.gripper_state='fully_open'
 
     def connect(self): self.pose_callback(self.current_pose)
     def disconnect(self): pass

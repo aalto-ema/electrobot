@@ -17,7 +17,7 @@ class FakeArm:
         self.cmds=SimpleNamespace(queue_start=lambda:self.calls.append('start'),
             queue_stop=lambda:self.calls.append('stop'),queue_clear=lambda:self.calls.append('clear'),
             current_index=lambda:0 if self.pending else self.index)
-        self.effector=SimpleNamespace(grip=lambda on,queued:self.calls.append(('grip',on,queued)))
+        self.effector=SimpleNamespace(grip=lambda on,enable,queued:self.calls.append(('grip',on,enable,queued)))
     def connect(self): self.calls.append('connect')
     def disconnect(self): self.calls.append('disconnect')
     def set_speed(self,*args): self.calls.append(('speed',args))
@@ -74,7 +74,9 @@ class DriverTests(unittest.TestCase):
         self.assertEqual(r.pose()['x'],210)
         call=next(c for c in r.arm.calls if isinstance(c,tuple) and c[0]=='move')
         self.assertEqual(call[2],{'mode':2,'wait':False})
-        r.grip(True); self.assertTrue(r.holding); self.assertIn(('grip',True,False),r.arm.calls)
+        r.grip(True); self.assertTrue(r.holding); self.assertIn(('grip',True,True,False),r.arm.calls)
+        r.grip(False); self.assertFalse(r.holding); self.assertEqual(r.gripper_state,'released'); self.assertEqual(r.arm.calls[-1],('grip',False,False,False))
+        r.open_fully(); self.assertFalse(r.holding); self.assertEqual(r.gripper_state,'fully_open'); self.assertEqual(r.arm.calls[-1],('grip',False,True,False))
         r.stop(); self.assertFalse(r.homed); self.assertEqual(r.arm.calls[-2:],['stop','clear'])
         r.disconnect()
     def test_outside_workspace_is_not_sent(self):

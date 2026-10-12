@@ -50,7 +50,7 @@ Native PalmSens CV returns to its start potential, so the UI has a combined **St
 
 ## Manual robot
 
-Use **Manual robot** to read the reported pose, home, jog XYZ/R, move to an absolute target, and open/close the gripper. Commands run in the same serialized worker as experiments, so batch and manual operations cannot compete for a device. Operations and mode changes are disabled during an active command.
+Use **Manual robot** to read the reported pose, home, jog XYZ/R, move to an absolute target, and release/close/fully open the gripper. Commands run in the same serialized worker as experiments, so batch and manual operations cannot compete for a device. Operations and mode changes are disabled during an active command.
 
 Hardware connection does not home, move, or actuate the gripper. Homing is explicit and required before hardware motion. Moves use `MOVL_XYZ`, wait for queued-command completion, and then verify reported XYZ/R against the configured tolerance. Timeouts, cancellation and pose mismatch stop and clear the queue. Rehome before subsequent hardware movement after a stop.
 
@@ -67,7 +67,7 @@ Robot calibration and Workspace use the same top/side diagram, including X/Y/Z b
 A suggested first lab session:
 
 1. Select Hardware, set the Dobot COM port and PalmSens device ID if more than one instrument is present, and connect the robot. Connect the potentiostat independently. An ambiguous discovery result is an error; the app does not silently pick a device or fall back to simulation.
-2. Clear the homing path and use Manual robot → Home. Test the gripper unloaded. The hardware driver uses `arm.effector.grip(on, queued=False)`; `True` closes it and `False` opens it. Check this behaviour on your installed gripper.
+2. Clear the homing path and use Manual robot → Home. Test the gripper unloaded. Normal release uses `arm.effector.grip(False, enable=False, queued=False)` so the pump is off and the fingers relax to their intermediate opening. Closing uses `grip(True, enable=True, queued=False)`. Manual robot also provides **Fully open · pump on**, using `grip(False, enable=True, queued=False)` for the powered opening limit. Experiments and rehearsals always use pump-off release. Check clearance and successful release with your installed gripper; displayed states are commanded, not measured finger positions.
 3. Jog in small increments and teach rack slot 1, cell and rinse poses. Configure rack spacing/columns, tool rotation, travel height, and endpoint workspace bounds. Validate all straight-line approaches and clearance transfers, including the initial lift from the current pose.
 4. Verify carrier seating, immersion, release/retrieval, gripper clearance and dry WE electrical contact. Mark **Station poses and paths calibrated** and **Gripper, seating and dry contact verified**. Geometry changes clear the fixture flag.
 5. Connect the potentiostat, select a chemistry-appropriate CV protocol and current range, and start with one electrode. The device validates the method before any batch movement.

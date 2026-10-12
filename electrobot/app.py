@@ -258,9 +258,10 @@ class Window(QMainWindow):
             f=QDoubleSpinBox(); f.setRange(-400,400); f.setValue(value); form.addRow(axis+(' (°)' if axis=='R' else ' (mm)'),f); self.target_fields.append(f)
         tl.addLayout(form); self.target_move=button('Move to XYZ/R',lambda:self.submit('move',tuple(f.value() for f in self.target_fields)),True); tl.addWidget(self.target_move); self.manual_buttons.append(self.target_move); self.motion_buttons.append(self.target_move); row.addWidget(target,1); l.addLayout(row)
         bottom=QHBoxLayout(); grip,gl=card('Gripper'); self.grip_label=self.note('Commanded state: open. No pickup sensor is configured.'); gl.addWidget(self.grip_label)
-        for text,closed in (('Open gripper',False),('Close gripper',True)):
+        for text,closed in (('Release · pump off',False),('Close gripper',True)):
             b=button(text,lambda checked=False,c=closed:self.submit('grip',c)); gl.addWidget(b); self.manual_buttons.append(b)
-        gl.addWidget(self.note('Disconnecting turns the pneumatic pump off.')); bottom.addWidget(grip)
+        b=button('Fully open · pump on',lambda:self.submit('open_fully')); gl.addWidget(b); self.manual_buttons.append(b)
+        gl.addWidget(self.note('Normal release turns the pump off and lets the fingers relax. Fully open actively spreads the fingers.')); bottom.addWidget(grip)
         teach,tt=card('Teach station'); self.teach_station=QComboBox(); self.teach_station.addItems(['Rack first slot','Cell seating pose','Rinse dipping pose','Travel height'])
         tt.addWidget(self.teach_station); self.teach_button=button('Use current pose',self.teach_pose); tt.addWidget(self.teach_button)
         tt.addWidget(self.note('Copies reported coordinates into Settings. Save the profile after checking clearance paths.')); bottom.addWidget(teach); l.addLayout(bottom); l.addStretch()
@@ -350,7 +351,8 @@ class Window(QMainWindow):
         hardware=self.mode.currentData()=='hardware'
         self.robot_status.setText('Robot · '+('connected' if state['robot'] else 'disconnected')+(' · homed' if state['homed'] else ''))
         self.pot_status.setText('Potentiostat · '+state.get('potentiostat_name','Disconnected'))
-        self.grip_label.setText('Commanded state: '+('closed / electrode may be held' if state['holding'] else 'open')+'. No pickup sensor is configured.')
+        gripper_labels={'closed':'closed · pump on / electrode may be held','released':'released · pump off','fully_open':'fully open · pump on','unknown':'unknown'}
+        self.grip_label.setText('Commanded state: '+gripper_labels[state.get('gripper_state','unknown')]+'. No pickup sensor is configured.')
         self.refresh_controls()
     def refresh_controls(self):
         idle=not self.busy and not self._close_pending; hardware=self.mode.currentData()=='hardware'; d=self.device_state

@@ -10,7 +10,7 @@ CURRENT_RANGES={.001:'1nA',.01:'10nA',.1:'100nA',1:'1uA',10:'10uA',100:'100uA',1
 class DobotRobot:
     def __init__(self,s,control,pose_callback=lambda p:None,arm_factory=None):
         self.s=s; self.control=control; self.pose_callback=pose_callback
-        self.arm_factory=arm_factory; self.arm=None; self.holding=False; self.homed=False
+        self.arm_factory=arm_factory; self.arm=None; self.holding=False; self.homed=False; self.gripper_state='unknown'
     def connect(self):
         if self.arm is not None: return
         try:
@@ -67,8 +67,14 @@ class DobotRobot:
         self._wait_index(index,self.s.motion_timeout,target)
     def grip(self,closed):
         self.control.check()
-        self.arm.effector.grip(bool(closed),queued=False)
+        self.arm.effector.grip(bool(closed),enable=bool(closed),queued=False)
         self.holding=bool(closed)  # Commanded state; not a pickup sensor.
+        self.gripper_state='closed' if closed else 'released'
+        self.control.wait(self.s.grip_dwell)
+    def open_fully(self):
+        self.control.check()
+        self.arm.effector.grip(False,enable=True,queued=False)
+        self.holding=False; self.gripper_state='fully_open'
         self.control.wait(self.s.grip_dwell)
     def stop(self):
         self.homed=False

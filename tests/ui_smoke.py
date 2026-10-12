@@ -26,6 +26,14 @@ for i in range(3):
 for index in range(w.settings_tabs.count()):
     w.settings_tabs.setCurrentIndex(index); app.processEvents()
     w.grab().save(f'cad/ui-settings-{index}.png')
+for index,scroll,diagram in ((2,w.calibration_scroll,w.calibration_diagram),(3,w.workspace_scroll,w.workspace_diagram)):
+    w.settings_tabs.setCurrentIndex(index); app.processEvents()
+    diagram_top=diagram.mapTo(w,diagram.rect().topLeft())
+    scroll.verticalScrollBar().setValue(scroll.verticalScrollBar().maximum()); app.processEvents()
+    assert diagram.isVisible() and diagram.mapTo(w,diagram.rect().topLeft())==diagram_top
+    assert diagram.visibleRegion().boundingRect()==diagram.rect()
+    w.grab().save(f'cad/ui-settings-{index}-scrolled.png')
+    scroll.verticalScrollBar().setValue(0)
 w.nav.setCurrentRow(1); w.submit('jog',(0,1)); idle(); assert w.current_pose['x']==201
 assert w.experiment_tracker.pose==w.current_pose==w.manual_tracker.pose
 assert any(200<p['x']<201 for p in w.manual_tracker.trail)

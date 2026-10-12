@@ -268,6 +268,18 @@ class Window(QMainWindow):
     def settings_tab(self,title):
         scroll=QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         content=QWidget(); layout=QVBoxLayout(content); layout.setSpacing(16); scroll.setWidget(content); self.settings_tabs.addTab(scroll,title); return layout
+    def calibration_tab(self,title):
+        tab=QWidget(); outer=QVBoxLayout(tab); outer.setContentsMargins(10,10,10,10)
+        feedback=self.note(''); outer.addWidget(feedback)
+        split=QSplitter(Qt.Orientation.Vertical); outer.addWidget(split,1)
+        diagram=CalibrationDiagram(workspace=True); diagram.setMinimumHeight(240); split.addWidget(diagram)
+        scroll=QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QScrollArea.Shape.NoFrame); scroll.setMinimumHeight(140)
+        content=QWidget(); layout=QVBoxLayout(content); layout.setSpacing(16); scroll.setWidget(content); split.addWidget(scroll)
+        split.setChildrenCollapsible(False); split.setSizes([300,400]); split.setStretchFactor(0,0); split.setStretchFactor(1,1)
+        split.setHandleWidth(8); split.handle(1).setToolTip('Drag to resize the diagram and settings areas')
+        split.setStyleSheet('QSplitter::handle:vertical { background: #d6e0e5; margin: 2px 0; }')
+        self.settings_tabs.addTab(tab,title)
+        return layout,feedback,diagram,scroll
     def make_settings(self):
         w,l=self.page(); actions=QHBoxLayout(); self.save_button=button('Save configuration',self.save,True); self.load_button=button('Load configuration…',self.load)
         self.placement_export=button('Export placement PDF…',self.export_placement)
@@ -281,11 +293,9 @@ class Window(QMainWindow):
         self.combo_field(f,'current_range_ua','Fixed current range',[(f'{v:g} µA',v) for v in (.001,.01,.1,1,10,100,1000,10000)])
         self.combo_field(f,'power_frequency','Mains frequency',[('50 Hz',50),('60 Hz',60)]); protocol.addWidget(acquisition)
         protocol.addWidget(self.note('Native PalmSens CV returns to its start potential. Hardware ignores the simulation multiplier. Current and potential values are recorded from SDK data; CSV time is nominal CV sample time.')); protocol.addStretch()
-        robot=self.settings_tab('Robot calibration')
+        robot,self.calibration_feedback,self.calibration_diagram,self.calibration_scroll=self.calibration_tab('Robot calibration')
         self.preset_button=button('Compact rehearsal from current pose',self.compact_rehearsal_preset,True); robot.addWidget(self.preset_button)
         robot.addWidget(self.note('Empty-gripper preset: read the live pose, use it as rack slot 1, offset cell +10 mm X and rinse +10 mm X/+10 mm Y, and set travel Z +5 mm. No movement is commanded. Readiness is cleared.'))
-        self.calibration_feedback=self.note(''); robot.addWidget(self.calibration_feedback)
-        self.calibration_diagram=CalibrationDiagram(workspace=True); robot.addWidget(self.calibration_diagram)
         layout_group=QGroupBox('Rack layout'); lf=QFormLayout(layout_group)
         self.combo_field(lf,'rack_layout','Slot arrangement',[('Rectangular grid','rectangular'),('Radial arcs around robot base','radial')]); robot.addWidget(layout_group)
         robot.addWidget(self.settings_group('Radial layout (mm / degrees)', [('rack_radius','First row radius',1,400),('rack_start_angle','Slot 1 angle (°)',-180,180),('rack_angle_step','Angle between slots (°)',.1,90)]))
@@ -311,9 +321,7 @@ class Window(QMainWindow):
         self.rack_export=button('Export rod rack STL + OpenSCAD…',self.export_rack); robot.addWidget(self.rack_export)
         robot.addWidget(self.note('Rack export includes complete rows through the last selected slot. Socket depth must exceed the tip length below the carrier shoulder. Choose compatible materials and verify printer-bed dimensions. Bare rods without a shoulder and flag electrodes need a different insert; teach rack Z after fitting the physical rack.'))
         robot.addWidget(self.note('Default coordinates and workspace bounds are placeholders. Position feedback verifies arm pose, not successful pickup or electrical contact. No automatic retry is enabled.')); robot.addStretch()
-        bounds=self.settings_tab('Workspace')
-        self.workspace_feedback=self.note(''); bounds.addWidget(self.workspace_feedback)
-        self.workspace_diagram=CalibrationDiagram(workspace=True); bounds.addWidget(self.workspace_diagram)
+        bounds,self.workspace_feedback,self.workspace_diagram,self.workspace_scroll=self.calibration_tab('Workspace')
         bounds.addWidget(self.note('These bounds constrain commanded endpoints. They do not model obstacles, joint limits or collision-free paths. Validate the complete travel route in the lab.'))
         bounds.addWidget(self.settings_group('Cartesian bounds (mm)', [(f'workspace_{axis}_{end}',f'{axis.upper()} {end}',-400,400) for axis in 'xyz' for end in ('min','max')]))
         bounds.addWidget(self.settings_group('Radial bounds from base (mm)', [('workspace_radius_min','Minimum radius',0,400),('workspace_radius_max','Maximum radius',1,400)])); bounds.addStretch()

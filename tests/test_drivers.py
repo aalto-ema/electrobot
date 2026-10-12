@@ -95,6 +95,17 @@ class DriverTests(unittest.TestCase):
                 r.move((210,0,20,0))
             self.assertIn('clear',r.arm.calls)
         finally: timer.join(); r.disconnect()
+    def test_live_pose_published_before_queue_completion(self):
+        r=self.robot(); r.home(); r.arm.pending=True
+        samples=[]
+        def feedback(pose):
+            samples.append(dict(pose)); r.control.cancel.set()
+        r.pose_callback=feedback
+        with patch.dict('sys.modules',{'dobotkit':SimpleNamespace(PTPMode=SimpleNamespace(MOVL_XYZ=2))}),self.assertRaises(Cancelled):
+            r.move((210,0,20,0))
+        self.assertTrue(samples)
+        self.assertTrue(r.arm.pending)
+        r.disconnect()
     def test_palm_mapping_units_cell_off_and_stream(self):
         sdk=FakeSDK(); s=Settings(mode='hardware'); p=PalmSensPotentiostat(s,sdk); p.connect()
         samples=[]

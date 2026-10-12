@@ -48,7 +48,12 @@ class DeviceWorker(QThread):
         self.robot.s=s; self.robot.control=control; self.pot.s=s
     def run(self):
         while True:
-            command,s,payload,control=self.commands.get()
+            try: command,s,payload,control=self.commands.get(timeout=.5)
+            except queue.Empty:
+                if self.mode=='hardware' and self.robot_connected:
+                    try: self.robot.pose()
+                    except Exception: self.pose.emit({})  # Hide unavailable feedback; retry next idle poll.
+                continue
             if command=='shutdown':
                 try: self.close_devices()
                 except Exception as exc: self.completed.emit(command,False,str(exc))

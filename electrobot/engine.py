@@ -32,8 +32,12 @@ class SimRobot:
         self.current_pose={'x':200.0,'y':0.0,'z':80.0,'r':0.0}; self.pose_callback=lambda p:None
     def move(self,pose):
         self.s.validate_pose(pose)
-        self.control.wait(.8/self.s.simulation_speed)
-        self.current_pose=dict(zip(('x','y','z','r'),(*pose,self.s.tool_r) if len(pose)==3 else pose)); self.pose_callback(self.current_pose)
+        target=dict(zip(('x','y','z','r'),(*pose,self.s.tool_r) if len(pose)==3 else pose))
+        start=dict(self.current_pose)
+        for step in range(1,11):
+            self.control.wait(.08/self.s.simulation_speed)
+            self.current_pose={k:start[k]+(target[k]-start[k])*step/10 for k in target}
+            self.pose_callback(dict(self.current_pose))
     def grip(self,closed):
         self.control.wait(.4/self.s.simulation_speed); self.holding=closed
 

@@ -23,6 +23,7 @@ with tempfile.TemporaryDirectory() as d,patch.object(worker_module,'DobotRobot',
     w.mode.setCurrentIndex(1); idle()
     assert not w.device_state['robot'] and not w.device_state['potentiostat']
     w.submit('connect_robot'); idle(); assert w.device_state['robot'] and not w.device_state['homed']
+    assert w.experiment_tracker.pose==w.current_pose==w.manual_tracker.pose
     w.submit('home'); idle(); assert w.device_state['homed']
     anchor=dict(w.current_pose)
     moves_before=[c for c in w.worker.robot.arm.calls if isinstance(c,tuple) and c[0]=='move']
@@ -61,6 +62,7 @@ with tempfile.TemporaryDirectory() as d,patch.object(worker_module,'DobotRobot',
     w.close(); app.processEvents(); assert w.isVisible() and w.worker.isRunning()
     w.submit('grip',False); idle(); w.disconnect_devices(); idle()
     assert not w.device_state['robot'] and not w.device_state['potentiostat']
+    assert w.experiment_tracker.pose is None and w.manual_tracker.pose is None
     w.mode.setCurrentIndex(0); idle()
 w.close(); deadline=time.monotonic()+3
 while w.worker.isRunning() and time.monotonic()<deadline: app.processEvents(); time.sleep(.01)

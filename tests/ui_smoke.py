@@ -26,6 +26,9 @@ for index in range(w.settings_tabs.count()):
     w.settings_tabs.setCurrentIndex(index); app.processEvents()
     w.grab().save(f'cad/ui-settings-{index}.png')
 w.nav.setCurrentRow(1); w.submit('jog',(0,1)); idle(); assert w.current_pose['x']==201
+assert w.experiment_tracker.pose==w.current_pose==w.manual_tracker.pose
+assert any(200<p['x']<201 for p in w.manual_tracker.trail)
+assert w.calibration_diagram.pose==w.current_pose==w.workspace_diagram.pose
 w.submit('grip',True); idle(); assert w.device_state['holding']
 w.submit('grip',False); idle(); assert not w.device_state['holding']
 w.submit('move',(201,-65,15,0)); idle()

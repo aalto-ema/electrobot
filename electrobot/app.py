@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QLabel,QPushButt
     QPlainTextEdit,QFileDialog,QMessageBox,QSplitter,QTabWidget,QTableWidget,QTableWidgetItem,
     QHeaderView,QAbstractItemView,QSizePolicy)
 from .config import Settings
-from .calibration_widgets import CalibrationDiagram
+from .calibration_widgets import CalibrationDiagram,RobotTracker
 from .worker import DeviceWorker
 from .camera import CameraWorker
 from .widgets import Plot,CapSketch,CameraPreview,STYLE,button,card
@@ -132,7 +132,7 @@ class Window(QMainWindow):
         try: s.validate()
         except ValueError as exc:
             if not self.validation_issues: self.validation_issues=[((),str(exc))]
-        for diagram in (self.calibration_diagram,self.workspace_diagram): diagram.set_settings(s)
+        for diagram in (self.calibration_diagram,self.workspace_diagram,self.experiment_tracker,self.manual_tracker): diagram.set_settings(s)
         bad={key for keys,_ in self.validation_issues for key in keys}
         for key,f in self.fields.items():
             f.setStyleSheet('border: 2px solid #c34848;' if key in bad else '')
@@ -215,17 +215,23 @@ class Window(QMainWindow):
         cl.addLayout(buttons); rl.addWidget(camera,3)
         activity,al=card('Activity'); self.log=QPlainTextEdit(); self.log.setReadOnly(True); self.log.setMaximumBlockCount(2000); self.log.setMinimumHeight(60); al.addWidget(self.log); rl.addWidget(activity,2)
         self.main_split.addWidget(right)
-        electrodes,el=card('Electrode queue')
+        electrodes,el=card('Robot & electrode queue')
+        self.experiment_tracker=RobotTracker(); el.addWidget(self.experiment_tracker,1)
+        el.addWidget(QLabel('Electrode queue'))
         self.queue_table=QTableWidget(0,3); self.queue_table.setHorizontalHeaderLabels(['Rack slot','Electrode','Status']); self.queue_table.verticalHeader().hide()
         self.queue_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch); self.queue_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.queue_table.setMinimumSize(240,150); el.addWidget(self.queue_table)
+        self.queue_table.setMinimumSize(240,60); el.addWidget(self.queue_table)
         self.main_split.addWidget(electrodes)
         self.main_split.setSizes([432,380,288])
         for index,stretch in enumerate((39,35,26)): self.main_split.setStretchFactor(index,stretch)
         l.addWidget(self.main_split,1)
         self.camera_buttons_update()
     def make_manual(self):
-        w,l=self.page(); l.addWidget(self.note('Manual commands use the selected device mode. Home after connection before hardware movement. Stop halts the queue and requires homing again.'))
+        w,outer=self.page(); split=QSplitter(Qt.Orientation.Horizontal)
+        controls=QWidget(); l=QVBoxLayout(controls); l.setContentsMargins(0,0,0,0); l.setSpacing(10)
+        split.addWidget(controls); self.manual_tracker=RobotTracker(); split.addWidget(self.manual_tracker)
+        split.setSizes([680,420]); outer.addWidget(split,1)
+        l.addWidget(self.note('Manual commands use the selected device mode. Home after connection before hardware movement. Stop halts the queue and requires homing again.'))
         actions=QHBoxLayout(); self.manual_buttons=[]; self.motion_buttons=[]
         for text,command in (('Read pose','pose'),('Home robot','home')):
             b=button(text,lambda checked=False,c=command:self.submit(c)); actions.addWidget(b); self.manual_buttons.append(b)
@@ -313,13 +319,18 @@ class Window(QMainWindow):
             return
         self.submit('disconnect')
     def change_mode(self):
-        self.current_pose=None; self.device_state={'robot':False,'potentiostat':False,'homed':False,'holding':False}
+        self.current_pose=None
+        for diagram in (self.calibration_diagram,self.workspace_diagram,self.experiment_tracker,self.manual_tracker): diagram.set_pose(None)
+        self.device_state={'robot':False,'potentiostat':False,'homed':False,'holding':False}
         hardware=self.mode.currentData()=='hardware'; self.plot.synthetic=not hardware; self.plot.clear()
         self.badge.setText('● HARDWARE' if hardware else '● SIMULATION'); self.sidebar_status.setText('Hardware\nPhysical devices selected' if hardware else 'Simulation\nNo physical commands')
         self.mode_note.setText('Hardware mode · connect devices, home the robot, and verify calibration before a batch. Stop is a software queue stop, not a physical emergency stop.' if hardware else 'Simulation mode · synthetic CV data. Connect a real camera independently if desired.')
         self.submit('configure')
     def on_devices(self,state):
         self.device_state=state
+        if not state['robot']:
+            self.current_pose=None
+            for diagram in (self.calibration_diagram,self.workspace_diagram,self.experiment_tracker,self.manual_tracker): diagram.set_pose(None)
         hardware=self.mode.currentData()=='hardware'
         self.robot_status.setText('Robot · '+('connected' if state['robot'] else 'disconnected')+(' · homed' if state['homed'] else ''))
         self.pot_status.setText('Potentiostat · '+state.get('potentiostat_name','Disconnected'))
@@ -359,7 +370,9 @@ class Window(QMainWindow):
             if s.mode=='hardware' and not self.device_state.get('homed'): raise ValueError('Home the robot on Manual robot before a hardware batch')
             if self.device_state.get('holding'): raise ValueError('Release or secure the currently held electrode before starting a new batch')
         except Exception as exc: QMessageBox.warning(self,'Batch not ready',str(exc)); return
-        self.s=s; self.plot.clear(); self.plot.synthetic=s.mode=='simulation'; self.plot_selection.clear(); self.plot_selection.addItem('All electrodes',None)
+        self.s=s
+        for tracker in (self.experiment_tracker,self.manual_tracker): tracker.clear_trail()
+        self.plot.clear(); self.plot.synthetic=s.mode=='simulation'; self.plot_selection.clear(); self.plot_selection.addItem('All electrodes',None)
         self.queue_table.setRowCount(s.electrodes)
         for row,index in enumerate(range(s.first_electrode,s.first_electrode+s.electrodes)):
             self.plot_selection.addItem(f'Electrode {index}',index)
@@ -390,7 +403,13 @@ class Window(QMainWindow):
             self.apply_compact_rehearsal(self.current_pose)
         self.refresh_controls()
     def on_pose(self,pose):
-        self.current_pose=dict(pose); self.pose_label.setText('    '.join(f'{k.upper()} {pose[k]:.2f}' for k in ('x','y','z','r')))
+        if not all(k in pose for k in ('x','y','z','r')):
+            self.current_pose=None; self.pose_label.setText('Position unavailable')
+            for diagram in (self.calibration_diagram,self.workspace_diagram,self.experiment_tracker,self.manual_tracker): diagram.set_pose(None)
+            return
+        self.current_pose=dict(pose)
+        for diagram in (self.calibration_diagram,self.workspace_diagram,self.experiment_tracker,self.manual_tracker): diagram.set_pose(pose)
+        self.pose_label.setText('    '.join(f'{k.upper()} {pose[k]:.2f}' for k in ('x','y','z','r')))
     def pause_run(self):
         if not self.running_batch or self.mode.currentData()!='simulation': return
         self.paused=not self.paused

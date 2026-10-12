@@ -38,8 +38,9 @@ class DobotRobot:
         try:
             while time.monotonic()<deadline:
                 self.control.check()
+                pose=self.pose()  # Publish measured feedback while the queue is moving.
                 if self.arm.cmds.current_index()>=index:
-                    pose=self.pose(); reached=True
+                    reached=True
                     if target is not None:
                         xyz_error=math.dist([float(pose[k]) for k in ('x','y','z')],target[:3])
                         rotation_error=abs((float(pose['r'])-target[3]+180)%360-180)

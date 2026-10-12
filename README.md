@@ -1,5 +1,7 @@
 # Electrobot
 
+Source repository: [aalto-ema/electrobot on GitHub](https://github.com/aalto-ema/electrobot). The project migrated from Aalto GitLab with its Git history preserved.
+
 PySide6 desktop workbench for a Dobot Magician Lite + MagicBox and PalmSens EmStat4S LR electrochemistry platform. Choose **Simulation** for development on macOS or **Hardware** for lab commissioning. The real drivers are implemented against `dobotkit 0.2.0` and `pypalmsens 2.2.0`; they have been tested with device doubles, not yet on the physical lab setup.
 
 ![Experiment workspace](cad/ui-run.png)
@@ -7,6 +9,15 @@ PySide6 desktop workbench for a Dobot Magician Lite + MagicBox and PalmSens EmSt
 ## Install and start
 
 Python 3.11–3.14. From the project folder:
+
+On a new computer, first download the repository:
+
+```sh
+git clone https://github.com/aalto-ema/electrobot.git
+cd electrobot
+```
+
+Then install and start:
 
 ```sh
 python -m venv .venv
@@ -148,5 +159,16 @@ Tests cover sequence/data retention, SDK parameter/unit mapping, abort/cell-off,
 - [Project status](docs/PROJECT_STATUS.md): implemented capabilities, physical evidence, provisional dimensions and open design decisions.
 
 Keep these documents current when behavior or commissioning evidence changes. Local calibration (`settings.json`) and measurement output (`runs/`) stay outside Git; committed profiles and CAD are explicitly labelled examples.
+
+GitHub is the primary remote for new work. To switch an existing GitLab checkout, preserve the old remote and configure GitHub:
+
+```sh
+git remote rename origin gitlab
+git remote add origin https://github.com/aalto-ema/electrobot.git
+git fetch origin
+git branch --set-upstream-to=origin/main main
+```
+
+These commands assume `origin` still points to the old GitLab repository and `gitlab` is not already configured. New GitHub clones need no remote changes.
 
 Sources: [Dobot library API/source](https://github.com/mslopgk/dobotkit), [PalmSens Python SDK installation](https://dev.palmsens.com/python/latest/_attachments/installation/), [PalmSens CV](https://sdk.palmsens.com/python/latest/_attachments/reference/methods/cyclic_voltammetry/), [PalmSens instrument management](https://sdk.palmsens.com/python/latest/_attachments/reference/instrument_async/), [EmStat4S specifications](https://assets.palmsens.com/product/emstat4s/), [OpenCV VideoCapture](https://docs.opencv.org/4.5.5/d8/dfe/classcv_1_1VideoCapture.html).

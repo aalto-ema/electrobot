@@ -62,3 +62,7 @@ Run `python scripts/check_project.py`; see its `--help` for the short unit-only 
 | UI layout | `app.py`/widgets, normal and compact screenshots, offscreen UI checks |
 
 Keep production hardware dependencies optional. `requirements.txt` supplies simulation/UI/CAD; `requirements-hardware.txt` adds pinned adapters. `requirements-lock.txt` is a recorded environment snapshot, not a substitute for maintaining the cross-platform runtime requirements.
+
+## Repository workflow
+
+The primary repository is public [aalto-ema/electrobot](https://github.com/aalto-ema/electrobot), migrated from Aalto GitLab on 2026-10-12 with Git history preserved. `origin` points to GitHub; the migration checkout retains the former remote as `gitlab`. New GitHub clones normally have only `origin`. Checked changes are committed and pushed directly to `main`, as the user confirmed. The README has clone and existing-checkout migration commands. Local calibration, run data and untracked files are not part of the Git-history migration.

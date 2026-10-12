@@ -9,6 +9,15 @@ from electrobot.config import Settings
 from electrobot.engine import Experiment,Control,Cancelled,SimRobot
 
 class CoreTests(unittest.TestCase):
+    def test_calibration_reports_multiple_conflicts(self):
+        s=Settings(safe_z=10,cell_x=350,workspace_y_min=100,workspace_y_max=-100)
+        messages=[message for _,message in s.calibration_issues()]
+        self.assertTrue(any('Y minimum' in m for m in messages))
+        self.assertTrue(any('Travel Z must' in m for m in messages))
+        self.assertTrue(any('Cell X' in m for m in messages))
+        self.assertTrue(any('Cell radius' in m for m in messages))
+        self.assertEqual(Settings().calibration_issues(),[])
+
     def test_robot_rehearsal_without_potentiostat(self):
         with tempfile.TemporaryDirectory() as d:
             s=Settings(mode='hardware',calibrated=True,fixture_verified=True,electrodes=1,settle=0,rinse_dwell=0)

@@ -167,6 +167,33 @@ class Settings:
             raise ValueError('Tool rotation must be within ±90 degrees')
         return pose
 
+    def calibration_issues(self):
+        """All independent calibration problems, including in simulation."""
+        issues=[]
+        def add(keys,message): issues.append((keys,message))
+        for axis in 'xyz':
+            a,b=f'workspace_{axis}_min',f'workspace_{axis}_max'
+            if getattr(self,a)>=getattr(self,b): add((a,b),f'{axis.upper()} minimum must be below maximum.')
+        if self.workspace_radius_min>=self.workspace_radius_max:
+            add(('workspace_radius_min','workspace_radius_max'),'Minimum radius must be below maximum radius.')
+        for key,label in (('rack_z','Rack gripping'),('cell_z','Cell seating'),('rinse_z','Rinse dipping')):
+            if self.safe_z<=getattr(self,key): add(('safe_z',key),f'Travel Z must be above {label.lower()} Z.')
+        if self.rack_pitch<=self.shoulder_diameter+4:
+            add(('rack_pitch','shoulder_diameter'),'Slot pitch must exceed shoulder diameter + 4 mm.')
+        slots=range(self.first_electrode,min(101,self.first_electrode+self.electrodes))
+        stations=[(f'Rack slot {i}',self.rack_pose(i),('rack_x','rack_y','rack_z','rack_pitch','rack_columns','first_electrode','electrodes')) for i in slots]
+        stations.extend((('Cell',(self.cell_x,self.cell_y,self.cell_z),('cell_x','cell_y','cell_z')),('Rinse',(self.rinse_x,self.rinse_y,self.rinse_z),('rinse_x','rinse_y','rinse_z'))))
+        for label,pose,keys in stations:
+            for axis,value in zip('xyz',pose):
+                a,b=f'workspace_{axis}_min',f'workspace_{axis}_max'
+                if not getattr(self,a)<=value<=getattr(self,b): add((*keys,a,b),f'{label} {axis.upper()}={value:g} mm is outside workspace limits.')
+            radius=math.hypot(*pose[:2])
+            if not self.workspace_radius_min<=radius<=self.workspace_radius_max:
+                add((*keys,'workspace_radius_min','workspace_radius_max'),f'{label} radius {radius:.1f} mm is outside the radial band.')
+        if not self.workspace_z_min<=self.safe_z<=self.workspace_z_max:
+            add(('safe_z','workspace_z_min','workspace_z_max'),'Travel Z is outside workspace Z limits.')
+        return issues
+
     def validate_batch(self):
         self.validate()
         if self.mode=='hardware':

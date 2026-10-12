@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QLabel,QPushButt
     QPlainTextEdit,QFileDialog,QMessageBox,QSplitter,QTabWidget,QTableWidget,QTableWidgetItem,
     QHeaderView,QAbstractItemView,QSizePolicy)
 from .config import Settings
+from .calibration_widgets import CalibrationDiagram
 from .worker import DeviceWorker
 from .camera import CameraWorker
 from .widgets import Plot,CapSketch,CameraPreview,STYLE,button,card
@@ -54,6 +55,9 @@ class Window(QMainWindow):
         for key in ('electrodes','first_electrode'):
             self.fields[key].valueChanged.connect(self.prepare_queue)
         self.prepare_queue()
+        for f in self.fields.values():
+            signal=f.valueChanged if isinstance(f,(QSpinBox,QDoubleSpinBox)) else f.toggled if isinstance(f,QCheckBox) else f.currentIndexChanged if isinstance(f,QComboBox) else f.textChanged
+            signal.connect(self.update_calibration_feedback)
         self.fields['calibrated'].toggled.connect(self.refresh_controls)
         self.fields['fixture_verified'].toggled.connect(self.refresh_controls)
         self.nav.currentRowChanged.connect(self.change_page); self.nav.setCurrentRow(0)
@@ -63,6 +67,7 @@ class Window(QMainWindow):
         self.worker.completed.connect(self.on_completed); self.worker.finished.connect(self.on_worker_finished); self.worker.start()
         self.mode.currentIndexChanged.connect(self.change_mode)
         self.timer=QTimer(self); self.timer.timeout.connect(lambda:self.plot.update() if self.plot.dirty else None); self.timer.start(100)
+        self.validation_issues=[]; self.update_calibration_feedback()
         self.refresh_controls(); self.submit('configure')
         if hasattr(self,'load_error'): self.statusBar().showMessage('Saved settings could not load; using defaults: '+self.load_error)
 
@@ -91,7 +96,7 @@ class Window(QMainWindow):
         f=QComboBox()
         for text,value in options: f.addItem(text,value)
         f.setCurrentIndex(f.findData(getattr(self.s,key))); self.fields[key]=f; form.addRow(label,f); return f
-    def read_settings(self):
+    def read_settings(self,validate=True):
         values=asdict(self.s)
         for key,f in self.fields.items():
             if isinstance(f,QCheckBox): values[key]=f.isChecked()
@@ -99,7 +104,7 @@ class Window(QMainWindow):
             elif isinstance(f,(QSpinBox,QDoubleSpinBox)): values[key]=f.value()
             else: values[key]=f.text()
         values['end_v']=values['start_v']  # Native PalmSens CV returns to begin potential.
-        return Settings(**values).validate()
+        return Settings(**values).validate() if validate else Settings(**values)
     def apply_settings(self,s):
         connection_keys=[]
         if self.device_state.get('robot'):
@@ -119,7 +124,49 @@ class Window(QMainWindow):
                 elif isinstance(f,(QSpinBox,QDoubleSpinBox)): f.setValue(getattr(s,key))
                 else: f.setText(getattr(s,key))
             finally: f.blockSignals(False)
-        s.mode=self.mode.currentData(); self.s=s; self.update_sketch(); self.prepare_queue()
+        s.mode=self.mode.currentData(); self.s=s; self.update_sketch(); self.prepare_queue(); self.update_calibration_feedback()
+    def update_calibration_feedback(self):
+        if not hasattr(self,'workspace_diagram'): return
+        s=self.read_settings(validate=False)
+        self.validation_issues=s.calibration_issues()
+        try: s.validate()
+        except ValueError as exc:
+            if not self.validation_issues: self.validation_issues=[((),str(exc))]
+        for diagram in (self.calibration_diagram,self.workspace_diagram): diagram.set_settings(s)
+        bad={key for keys,_ in self.validation_issues for key in keys}
+        for key,f in self.fields.items():
+            f.setStyleSheet('border: 2px solid #c34848;' if key in bad else '')
+        messages=list(dict.fromkeys(message for _,message in self.validation_issues))
+        text=('Check settings:\n'+'\n'.join('• '+m for m in messages[:12])+(f'\n… {len(messages)-12} more issues' if len(messages)>12 else '')) if messages else '✓ Dimensions and selected route endpoints are compatible. Physical clearance still needs verification.'
+        for label in (self.calibration_feedback,self.workspace_feedback):
+            label.setText(text); label.setStyleSheet('color: #b53636;' if messages else 'color: #08796f;')
+        if hasattr(self,'worker'): self.refresh_controls()
+
+    def compact_rehearsal_preset(self):
+        if self.busy: return
+        if self.device_state.get('holding'): return
+        self.submit('rehearsal_pose')
+
+    def apply_compact_rehearsal(self,pose):
+        if pose is None: return
+        from dataclasses import replace
+        s=replace(self.read_settings(validate=False),run_name='Compact empty-gripper rehearsal',
+            first_electrode=1,electrodes=1,rack_x=pose['x'],rack_y=pose['y'],rack_z=pose['z'],
+            cell_x=pose['x']+10,cell_y=pose['y'],cell_z=pose['z'],
+            rinse_x=pose['x']+10,rinse_y=pose['y']+10,rinse_z=pose['z'],
+            safe_z=pose['z']+5,tool_r=pose['r'],robot_velocity=10,robot_acceleration=10,
+            settle=1,rinse_dips=1,rinse_dwell=.5,calibrated=False,fixture_verified=False)
+        issues=s.calibration_issues()
+        try:
+            s.validate()
+            if issues: raise ValueError('\n'.join(dict.fromkeys(m for _,m in issues)))
+        except ValueError as exc:
+            self.statusBar().showMessage('Preset not applied: '+str(exc))
+            self.calibration_feedback.setText('Preset not applied from the current pose:\n'+str(exc))
+            self.calibration_feedback.setStyleSheet('color: #b53636;'); return
+        self.apply_settings(s)
+        self.statusBar().showMessage('Compact preset applied from fresh pose; no movement commanded. Verify the empty route before marking readiness.')
+
     def save(self):
         try:
             self.s=self.read_settings(); (ROOT/'settings.json').write_text(json.dumps(asdict(self.s),indent=2))
@@ -218,13 +265,33 @@ class Window(QMainWindow):
         self.combo_field(f,'current_range_ua','Fixed current range',[(f'{v:g} µA',v) for v in (.001,.01,.1,1,10,100,1000,10000)])
         self.combo_field(f,'power_frequency','Mains frequency',[('50 Hz',50),('60 Hz',60)]); protocol.addWidget(acquisition)
         protocol.addWidget(self.note('Native PalmSens CV returns to its start potential. Hardware ignores the simulation multiplier. Current and potential values are recorded from SDK data; CSV time is nominal CV sample time.')); protocol.addStretch()
-        robot=self.settings_tab('Robot calibration'); row=QHBoxLayout()
+        robot=self.settings_tab('Robot calibration')
+        self.preset_button=button('Compact rehearsal from current pose',self.compact_rehearsal_preset,True); robot.addWidget(self.preset_button)
+        robot.addWidget(self.note('Empty-gripper preset: read the live pose, use it as rack slot 1, offset cell +10 mm X and rinse +10 mm X/+10 mm Y, and set travel Z +5 mm. No movement is commanded. Readiness is cleared.'))
+        self.calibration_feedback=self.note(''); robot.addWidget(self.calibration_feedback)
+        self.calibration_diagram=CalibrationDiagram(); robot.addWidget(self.calibration_diagram)
+        row=QHBoxLayout()
         row.addWidget(self.settings_group('Rack (mm)', [('rack_columns','Columns',1,20),('rack_pitch','Slot pitch'),('rack_x','First slot X',-400,400),('rack_y','First slot Y',-400,400),('rack_z','Gripping Z',-100,300),('safe_z','Travel Z',-100,300)]))
         row.addWidget(self.settings_group('Stations (mm)', [('cell_x','Cell X',-400,400),('cell_y','Cell Y',-400,400),('cell_z','Cell seating Z',-100,300),('rinse_x','Rinse X',-400,400),('rinse_y','Rinse Y',-400,400),('rinse_z','Rinse dipping Z',-100,300),('tool_r','Carrier rotation (°)',-90,90)])); robot.addLayout(row)
         robot.addWidget(self.settings_group('Motion', [('robot_velocity','Velocity setting',.1,100),('robot_acceleration','Acceleration setting',.1,100),('motion_timeout','Motion timeout (s)',1,120),('home_timeout','Homing timeout (s)',20,180),('position_tolerance','XYZ tolerance (mm)',.05,5),('rotation_tolerance','R tolerance (°)',.1,5),('grip_dwell','Gripper dwell (s)',.1,10)]))
+        robot.addWidget(self.note('XYZ tolerance is the maximum distance between the commanded and reported tool positions; R tolerance is the allowed angular error. Gripper dwell is the wait after an open/close command. Motion/home timeouts limit how long completion is awaited. Velocity and acceleration are SDK settings (0–100), not guaranteed mm/s or mm/s².'))
+        for key,tip in {
+            'rack_columns':'Slots increase along +X across this many columns, then advance one pitch along +Y.',
+            'rack_pitch':'Center-to-center distance between adjacent rack slots in X and Y.',
+            'rack_z':'Reported robot tool Z when gripping; not the electrode tip height.',
+            'cell_z':'Reported robot tool Z when seating/retrieving the carrier.',
+            'rinse_z':'Reported robot tool Z at the bottom of each rinse dip.',
+            'safe_z':'Absolute tool Z for horizontal transfers; must be above every station approach Z.',
+            'tool_r':'Rotation about vertical Z, applied at every station; it does not tilt the electrode.',
+            'position_tolerance':'Maximum XYZ distance error accepted after queue completion.',
+            'rotation_tolerance':'Maximum R angle error accepted after queue completion.',
+        }.items(): self.fields[key].setToolTip(tip)
         robot.addWidget(self.settings_group('Hardware batch readiness', [('calibrated','Station poses and paths calibrated'),('fixture_verified','Gripper, seating and dry contact verified')]))
         robot.addWidget(self.note('Default coordinates and workspace bounds are placeholders. Position feedback verifies arm pose, not successful pickup or electrical contact. No automatic retry is enabled.')); robot.addStretch()
-        bounds=self.settings_tab('Workspace'); bounds.addWidget(self.note('These bounds constrain commanded endpoints. They do not model obstacles, joint limits or collision-free paths. Validate the complete travel route in the lab.'))
+        bounds=self.settings_tab('Workspace')
+        self.workspace_feedback=self.note(''); bounds.addWidget(self.workspace_feedback)
+        self.workspace_diagram=CalibrationDiagram(workspace=True); bounds.addWidget(self.workspace_diagram)
+        bounds.addWidget(self.note('These bounds constrain commanded endpoints. They do not model obstacles, joint limits or collision-free paths. Validate the complete travel route in the lab.'))
         bounds.addWidget(self.settings_group('Cartesian bounds (mm)', [(f'workspace_{axis}_{end}',f'{axis.upper()} {end}',-400,400) for axis in 'xyz' for end in ('min','max')]))
         bounds.addWidget(self.settings_group('Radial bounds from base (mm)', [('workspace_radius_min','Minimum radius',0,400),('workspace_radius_max','Maximum radius',1,400)])); bounds.addStretch()
         cell=self.settings_tab('Cell & carrier'); row=QHBoxLayout()
@@ -236,7 +303,7 @@ class Window(QMainWindow):
 
     def submit(self,command,payload=None):
         if self.busy or self._close_pending: return
-        try: s=self.read_settings()
+        try: s=self.read_settings(validate=command!='rehearsal_pose')
         except Exception as exc: QMessageBox.warning(self,'Check settings',str(exc)); return
         self.busy=True; self.refresh_controls(); self.statusBar().showMessage(command.replace('_',' ').capitalize()+'…')
         self.worker.submit(command,s,payload)
@@ -262,7 +329,8 @@ class Window(QMainWindow):
         idle=not self.busy and not self._close_pending; hardware=self.mode.currentData()=='hardware'; d=self.device_state
         self.mode.setEnabled(idle and not d.get('robot') and not d.get('potentiostat') or idle and self.mode.currentData()=='simulation')
         # Switching modes owns teardown in the worker; hardware users disconnect first.
-        ready=not hardware or (d.get('homed',False) and self.fields['calibrated'].isChecked() and self.fields['fixture_verified'].isChecked())
+        ready=not getattr(self,'validation_issues',[]) and (not hardware or (d.get('homed',False) and self.fields['calibrated'].isChecked() and self.fields['fixture_verified'].isChecked()))
+        self.preset_button.setEnabled(idle and d.get('robot',False) and not d.get('holding',False) and (not hardware or d.get('homed',False)))
         self.start.setEnabled(idle and ready and not d.get('holding',False) and d.get('robot',False) and d.get('potentiostat',False))
         self.start.setToolTip('Hardware: connect both devices, home the robot, and verify calibration and the fixture in Settings.')
         self.rehearse.setEnabled(idle and ready and not d.get('holding',False) and d.get('robot',False))
@@ -318,6 +386,8 @@ class Window(QMainWindow):
             if command in ('run','rehearse'): self.state.setText('Stopped' if message=='Stopped' else 'Failed')
             if not self._close_pending and message!='Stopped': QMessageBox.warning(self,'Device operation stopped',message)
         elif command not in ('run','rehearse'): self.statusBar().showMessage(command.replace('_',' ').capitalize()+' completed')
+        if command=='rehearsal_pose' and ok:
+            self.apply_compact_rehearsal(self.current_pose)
         self.refresh_controls()
     def on_pose(self,pose):
         self.current_pose=dict(pose); self.pose_label.setText('    '.join(f'{k.upper()} {pose[k]:.2f}' for k in ('x','y','z','r')))

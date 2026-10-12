@@ -24,6 +24,25 @@ with tempfile.TemporaryDirectory() as d,patch.object(worker_module,'DobotRobot',
     assert not w.device_state['robot'] and not w.device_state['potentiostat']
     w.submit('connect_robot'); idle(); assert w.device_state['robot'] and not w.device_state['homed']
     w.submit('home'); idle(); assert w.device_state['homed']
+    anchor=dict(w.current_pose)
+    moves_before=[c for c in w.worker.robot.arm.calls if isinstance(c,tuple) and c[0]=='move']
+    w.preset_button.click(); idle()
+    assert [c for c in w.worker.robot.arm.calls if isinstance(c,tuple) and c[0]=='move']==moves_before
+    assert w.fields['rack_x'].value()==anchor['x']
+    assert w.fields['cell_x'].value()==anchor['x']+10
+    assert w.fields['rinse_y'].value()==anchor['y']+10
+    assert w.fields['safe_z'].value()==anchor['z']+5
+    assert w.current_pose==anchor
+    assert not w.fields['calibrated'].isChecked() and not w.fields['fixture_verified'].isChecked()
+    assert not w.validation_issues
+    w.fields['safe_z'].setValue(anchor['z']); app.processEvents()
+    assert 'Travel Z must' in w.calibration_feedback.text() and not w.rehearse.isEnabled()
+    w.preset_button.click(); idle(); assert not w.validation_issues
+    before=w.read_settings()
+    w.apply_compact_rehearsal(dict(anchor,x=295))
+    assert w.read_settings()==before
+    assert 'Preset not applied' in w.calibration_feedback.text()
+    w.update_calibration_feedback()
     w.fields['electrodes'].setValue(1); w.fields['settle'].setValue(0); w.fields['rinse_dwell'].setValue(0); w.fields['grip_dwell'].setValue(.1)
     w.fields['calibrated'].setChecked(True); w.fields['fixture_verified'].setChecked(True)
     w.refresh_controls(); assert w.rehearse.isEnabled() and not w.start.isEnabled()

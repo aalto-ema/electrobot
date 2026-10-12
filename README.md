@@ -58,6 +58,10 @@ Hardware connection does not home, move, or actuate the gripper. Homing is expli
 
 Settings groups persistent design and calibration parameters into Devices, Measurement defaults, Robot calibration, Workspace, and Cell & carrier tabs. Configurations save to `settings.json` and can be loaded from JSON. Profiles never connect hardware or change the selected mode automatically; every app session starts in Simulation.
 
+Robot calibration includes **Compact rehearsal from current pose**. With an idle connected robot (homed in hardware mode and commanded open), this reads a fresh pose without motion and anchors rack slot 1 to it. Cell is +10 mm X, rinse is +10 mm X/+10 mm Y, and travel Z is +5 mm; tool R is preserved. It selects one electrode, one 0.5 s rinse dip, 1 s settling and velocity/acceleration settings of 10. Calibration and fixture readiness are cleared. An incompatible preset is rejected without changing any settings; move manually to a verified clear intermediate pose and try again. Use only with an empty gripper initially.
+
+Native top/side diagrams in Robot calibration and Workspace explain rack coordinates and slot ordering, pitch, station approach heights, travel Z, vertical-axis rotation and the intersection of Cartesian bounds with the radial band. Labels update as settings change; schematic geometry is not a scaled collision model. Tooltips and motion notes explain tolerances, timeouts and dwell settings. Both tabs show live incompatibility messages and highlight related fields. Checks cover height ordering, rack pitch, inverted bounds and all selected station/transfer endpoints, in simulation as well as hardware. Invalid settings disable experiment and rehearsal starts. Passing these checks does not establish physical clearance.
+
 A suggested first lab session:
 
 1. Select Hardware, set the Dobot COM port and PalmSens device ID if more than one instrument is present, and connect the robot. Connect the potentiostat independently. An ambiguous discovery result is an error; the app does not silently pick a device or fall back to simulation.

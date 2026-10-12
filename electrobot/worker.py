@@ -55,7 +55,8 @@ class DeviceWorker(QThread):
                 self.publish(); return
             ok=True; message=''
             try:
-                s.validate(); self.setup(s,control); control.check()
+                if command!='rehearsal_pose': s.validate()
+                self.setup(s,control); control.check()
                 if command=='configure':
                     if self.robot_connected: self.robot.pose()
                 elif command=='connect_robot':
@@ -73,7 +74,7 @@ class DeviceWorker(QThread):
                 else:
                     if not self.robot_connected: raise RuntimeError('Connect the robot first')
                     if command=='home': self.robot.home()
-                    elif command=='pose': self.robot.pose()
+                    elif command in ('pose','rehearsal_pose'): self.robot.pose()
                     elif command=='move': self.robot.move(payload)
                     elif command=='jog':
                         pose=self.robot.pose(); target=[pose[k] for k in ('x','y','z','r')]

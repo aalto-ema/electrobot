@@ -2,6 +2,8 @@
 
 Source repository: [aalto-ema/electrobot on GitHub](https://github.com/aalto-ema/electrobot). The project migrated from Aalto GitLab with its Git history preserved.
 
+Licensed under the [MIT License](LICENSE).
+
 PySide6 desktop workbench for a Dobot Magician Lite + MagicBox and PalmSens EmStat4S LR electrochemistry platform. Choose **Simulation** for development on macOS or **Hardware** for lab commissioning. The real drivers are implemented against `dobotkit 0.2.0` and `pypalmsens 2.2.0`; they have been tested with device doubles, not yet on the physical lab setup.
 
 ![Experiment workspace](cad/ui-run.png)

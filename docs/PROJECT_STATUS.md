@@ -1,9 +1,10 @@
 # Project status and open design decisions
 
-Last reviewed: 2026-10-12. Update this document when capabilities or physical evidence change. Source code describes behavior; a passing mocked test is not a lab commissioning result.
+Last reviewed: 2026-10-13. Update this document when capabilities or physical evidence change. Source code describes behavior; a passing mocked test is not a lab commissioning result.
 
 ## Established project choices
 
+- MIT license, selected by the user on 2026-10-13; full text in the repository-root `LICENSE`.
 - Native PySide6 desktop UI with emphasis on readable controls, diagrams and live feedback.
 - macOS simulation/development; Windows lab deployment.
 - Dobot **Magician Lite**, MagicBox over USB, three-finger pneumatic soft gripper. Software uses DobotLink and `dobotkit`; this is not the larger Magician arm.

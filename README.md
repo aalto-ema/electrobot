@@ -129,6 +129,8 @@ The **legacy blind-socket design** still exports its connected base, upright soc
 
 The [`cad/radial-example`](cad/radial-example) folder contains the original monolithic 24-slot prototype, editable settings, STL, OpenSCAD, manifest and printable guide. Its footprint is approximately **95 × 253 mm**, height **69 mm**; check printer-bed size before slicing. Both example layouts use uncommissioned positions and dimensions.
 
+For a small first rack print, [`cad/three-electrode-print`](cad/three-electrode-print) includes a **single STL with all nine pieces**: one three-seat radial support, three feet, three holders and two fit coupons. Its compact footprint is approximately 126.5 × 132.1 mm; the tall feet are grouped together. See its labelled plate preview and slicing notes. It is a geometry file for normal layer-by-layer printing, not printer-specific G-code or a validated sequential-print project.
+
 ## Verification
 
 From the project folder, run all software checks using the project script:

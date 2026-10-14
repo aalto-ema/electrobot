@@ -43,6 +43,7 @@ Geometry changes clear relevant readiness flags. `calibration_issues()` feeds in
 | `placement_pdf.py` | Qt PDF overview, coordinate checklist and actual-size placement tiles |
 | `cad/gripper/generate.py` + `dimensions.json` | Provisional collar and separate electrical-probe bracket parts |
 | `cad/modular-example/generate.py` + `example-config.json` | Reproducible modular rack files and mesh-based assembly preview |
+| `cad/three-electrode-print/generate.py` | Single-STL compact three-seat kit using production CAD, clustered feet, two fit coupons and plate manifest/preview |
 
 CAD uses Shapely outlines, trimesh extrusion/meshes and Manifold booleans. Each exported part is checked for closed volume and one connected solid. Top modules are grouped per rack row and limited by slots/module. Geometry is normalized to local coordinates so identical rotated shapes share an STL and quantity. Each module records its world origin, rotation, slot coordinates and foot centres.
 

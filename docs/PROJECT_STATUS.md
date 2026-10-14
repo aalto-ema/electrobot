@@ -1,6 +1,6 @@
 # Project status and open design decisions
 
-Last reviewed: 2026-10-13. Update this document when capabilities or physical evidence change. Source code describes behavior; a passing mocked test is not a lab commissioning result.
+Last reviewed: 2026-10-14. Update this document when capabilities or physical evidence change. Source code describes behavior; a passing mocked test is not a lab commissioning result.
 
 ## Established project choices
 
@@ -23,6 +23,7 @@ Last reviewed: 2026-10-13. Update this document when capabilities or physical ev
 - Persistent settings, inline geometric checks and pinned calibration/workspace diagrams.
 - PDF placement templates, legacy socket rack and modular holder-supported rack exports.
 - Modular rack: adjustable holder and interface dimensions, separate tops/feet/holders, fit coupon, bed-fit checks, quantities, geometry IDs and assembly origins/rotations.
+- Compact three-electrode print kit in `cad/three-electrode-print`: one STL with a three-seat radial top, three clustered feet, three holders and two fit coupons. Geometry is arranged for layer-by-layer printing; no printer-specific G-code or complete-object sequential clearances have been validated. Printer model/slicer are not yet specified.
 - Unit tests, offscreen UI checks and a mocked hardware UI integration check. No cloud service is required to run the app.
 
 ## Physical evidence and assumptions

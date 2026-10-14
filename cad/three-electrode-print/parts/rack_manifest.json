@@ -1,0 +1,329 @@
+{
+  "design": "collar-supported modular lattice",
+  "settings": {
+    "mode": "simulation",
+    "run_name": "Electrode screening",
+    "first_electrode": 1,
+    "robot_host": "localhost",
+    "robot_ws_port": 9090,
+    "robot_velocity": 20.0,
+    "robot_acceleration": 20.0,
+    "robot_timeout": 5.0,
+    "motion_timeout": 30.0,
+    "home_timeout": 60.0,
+    "position_tolerance": 1.0,
+    "rotation_tolerance": 1.0,
+    "tool_r": 0.0,
+    "grip_dwell": 0.7,
+    "workspace_x_min": -300.0,
+    "workspace_x_max": 300.0,
+    "workspace_y_min": -300.0,
+    "workspace_y_max": 300.0,
+    "workspace_z_min": -50.0,
+    "workspace_z_max": 150.0,
+    "workspace_radius_min": 120.0,
+    "workspace_radius_max": 300.0,
+    "calibrated": false,
+    "fixture_verified": false,
+    "potentiostat_id": "",
+    "sdk_timeout": 20.0,
+    "power_frequency": 50,
+    "electrodes": 3,
+    "rack_columns": 3,
+    "rack_pitch": 36,
+    "rack_layout": "radial",
+    "rack_radius": 200.0,
+    "rack_start_angle": -11,
+    "rack_angle_step": 11,
+    "rack_socket_clearance": 0.4,
+    "rack_socket_depth": 60.0,
+    "rack_post_height": 65.0,
+    "rack_socket_wall": 3.0,
+    "rack_base_thickness": 4.0,
+    "rack_margin": 6.0,
+    "rack_design": "lattice",
+    "holder_diameter": 18.0,
+    "holder_height": 14.0,
+    "holder_flange_diameter": 24.0,
+    "holder_flange_thickness": 3.0,
+    "holder_rod_depth": 13.0,
+    "holder_rod_clearance": 0.3,
+    "holder_pad_diameter": 8.0,
+    "holder_pad_depth": 1.0,
+    "holder_wire_diameter": 2.0,
+    "holder_set_screw_diameter": 2.5,
+    "rack_holder_clearance": 0.4,
+    "rack_seat_depth": 1.5,
+    "rack_deck_thickness": 6.0,
+    "rack_seat_wall": 3.0,
+    "rack_rib_width": 6.0,
+    "rack_hanging_length": 87.0,
+    "rack_tip_clearance": 10.0,
+    "rack_gripper_gap": 8.0,
+    "rack_module_slots": 3,
+    "rack_peg_diameter": 4.0,
+    "rack_peg_clearance": 0.3,
+    "rack_peg_length": 2.0,
+    "rack_foot_base": 3.0,
+    "rack_foot_column_diameter": 6.0,
+    "rack_foot_mount_hole": 3.4,
+    "rack_printer_width": 220,
+    "rack_printer_depth": 220,
+    "rinse_beaker_diameter": 50.0,
+    "rod_diameter": 6.0,
+    "rod_length": 100.0,
+    "shoulder_diameter": 12.0,
+    "tip_below_shoulder": 50.0,
+    "immersion": 15.0,
+    "beaker_diameter": 50.0,
+    "beaker_height": 70.0,
+    "rim_diameter": 53.0,
+    "cap_clearance": 0.8,
+    "cap_wall": 3.0,
+    "cap_thickness": 4.0,
+    "skirt_depth": 6.0,
+    "we_clearance": 0.6,
+    "funnel_diameter": 10.0,
+    "re_hole": 8.0,
+    "ce_hole": 6.0,
+    "port_offset": 14.0,
+    "rinse_dips": 3,
+    "rinse_dwell": 1.0,
+    "settle": 2.0,
+    "safe_z": 80.0,
+    "rack_x": 190.0,
+    "rack_y": -65.0,
+    "rack_z": 15.0,
+    "cell_x": 220.0,
+    "cell_y": 15.0,
+    "cell_z": 15.0,
+    "rinse_x": 190.0,
+    "rinse_y": 70.0,
+    "rinse_z": 15.0,
+    "start_v": 0.0,
+    "vertex1_v": 0.5,
+    "vertex2_v": -0.5,
+    "end_v": 0.0,
+    "scan_rate": 0.1,
+    "step_v": 0.005,
+    "cycles": 2,
+    "current_range_ua": 100.0,
+    "simulation_speed": 10.0,
+    "camera_index": -1,
+    "robot_port": "auto",
+    "reference_label": "Ag/AgCl (confirm electrolyte)"
+  },
+  "units": "mm",
+  "parts": [
+    {
+      "file": "rack_top_01.stl",
+      "quantity": 1,
+      "bounds_mm": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          106.27220153808594,
+          37.615299224853516,
+          6.0
+        ]
+      ],
+      "volume_mm3": 11707.951159482616,
+      "size_mm": [
+        106.27220153808594,
+        37.615299224853516,
+        6.0
+      ],
+      "geometry_id": "87d5aa530009",
+      "fits_printer_xy": true
+    },
+    {
+      "file": "rack_foot.stl",
+      "quantity": 3,
+      "bounds_mm": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          32.0,
+          20.0,
+          94.5
+        ]
+      ],
+      "volume_mm3": 6306.3648031163,
+      "size_mm": [
+        32.0,
+        20.0,
+        94.5
+      ],
+      "geometry_id": "a3402a416d7c",
+      "fits_printer_xy": true
+    },
+    {
+      "file": "pickup_holder.stl",
+      "quantity": 3,
+      "bounds_mm": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          24.0,
+          24.0,
+          17.0
+        ]
+      ],
+      "volume_mm3": 4418.834024059289,
+      "size_mm": [
+        24.0,
+        24.0,
+        17.0
+      ],
+      "geometry_id": "2352cf1e993f",
+      "fits_printer_xy": true
+    },
+    {
+      "file": "rack_fit_coupon.stl",
+      "quantity": 1,
+      "purpose": "optional single-seat fit trial",
+      "bounds_mm": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          30.299999237060547,
+          30.299999237060547,
+          6.0
+        ]
+      ],
+      "volume_mm3": 3704.692217776787,
+      "size_mm": [
+        30.299999237060547,
+        30.299999237060547,
+        6.0
+      ],
+      "geometry_id": "857d756db84a",
+      "fits_printer_xy": true
+    }
+  ],
+  "modules": [
+    {
+      "module": 1,
+      "file": "rack_top_01.stl",
+      "slots": [
+        1,
+        2,
+        3
+      ],
+      "slot_robot_xyz": [
+        [
+          196.3254366895328,
+          -38.16179907530896,
+          15.0
+        ],
+        [
+          200.0,
+          0.0,
+          15.0
+        ],
+        [
+          196.3254366895328,
+          38.16179907530896,
+          15.0
+        ]
+      ],
+      "robot_xy_at_stl_origin": [
+        209.95362594411418,
+        -54.694114631253115
+      ],
+      "assembled_bottom_z_mm": 92.5,
+      "rotation_deg": 84.50000000000003,
+      "slot_local_xy": [
+        [
+          15.15,
+          15.15
+        ],
+        [
+          53.488299999999995,
+          15.15
+        ],
+        [
+          91.1222,
+          22.4653
+        ]
+      ],
+      "foot_centers_robot_xy": [
+        [
+          196.3254366895328,
+          -38.16179907530896
+        ],
+        [
+          200.0,
+          0.0
+        ],
+        [
+          196.3254366895328,
+          38.16179907530896
+        ]
+      ],
+      "foot_orientation": "parallel to this module local X",
+      "geometry_id": "209d3ebe6ca1"
+    }
+  ],
+  "slot_robot_xyz": [
+    [
+      196.3254366895328,
+      -38.16179907530896,
+      15.0
+    ],
+    [
+      200.0,
+      0.0,
+      15.0
+    ],
+    [
+      196.3254366895328,
+      38.16179907530896,
+      15.0
+    ]
+  ],
+  "bounds_mm": [
+    [
+      181.1754366895328,
+      -54.11296260400103,
+      0
+    ],
+    [
+      215.15,
+      54.11296260400103,
+      98.5
+    ]
+  ],
+  "seat_height_mm": 97.0,
+  "foot_height_mm": 92.5,
+  "foot_quantity": 3,
+  "holder_quantity": 3,
+  "foot_center_local_xy": [
+    16.0,
+    6.0
+  ],
+  "foot_mount_hole_local_xy": [
+    16.0,
+    16.0
+  ],
+  "holder_axis_local_xy": [
+    12.0,
+    12.0
+  ],
+  "rack_solid_volume_mm3": 30627.04556883152,
+  "watertight": true,
+  "reuse": "Identical top shapes share a file and quantity. Existing full modules can be reused when slot coordinates, holder/foot dimensions and module size stay unchanged. Feet are identical across this export.",
+  "note": "Provisional fits. Print a holder, foot and small top first. Pegs are removable push fits, not locking joints; secure each module to the bench and test wobble/pickup before motion. Metal pad, wire and rod-retention screw are separate; pilot hole is not threaded. Teach rack Z after assembly."
+}

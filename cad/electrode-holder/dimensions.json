@@ -1,0 +1,28 @@
+{
+  "electrode_body_diameter": 6.0,
+  "electrode_body_length_estimate": 60.0,
+  "terminal_length_estimate": 20.0,
+  "bore_clearance": 0.1,
+  "body_diameter": 22.0,
+  "flange_diameter": 26.0,
+  "pilot_height": 1.5,
+  "flange_thickness": 3.0,
+  "total_height": 20.0,
+  "split_gap": 0.4,
+  "bolt_diameter": 3.4,
+  "bolt_x": 6.3,
+  "bolt_z": 15.0,
+  "bolt_flat_y": 5.0,
+  "contact_z": 6.0,
+  "contact_width": 3.0,
+  "contact_recess": 0.25,
+  "wire_channel_radius": 0.8,
+  "printer_bed": [
+    220.0,
+    220.0
+  ],
+  "provenance": "Body diameter confirmed by user; body/terminal lengths estimated from ruler photo. Other dimensions are provisional.",
+  "pilot_diameter": 18.0,
+  "nut_across_flats": 5.8,
+  "nut_depth": 3.0
+}

@@ -63,6 +63,7 @@ Protocol basis, inspected 2026-10-14: [DobotLink pose/alarm encoders and decoder
 | `lattice_rack.py` | Modular top supports, identical fork feet, pickup holder, fit coupon, quantities and assembly manifest |
 | `mesh_utils.py` | Connected-solid check without introducing SciPy |
 | `placement_pdf.py` | Qt PDF overview, coordinate checklist and actual-size placement tiles |
+| `electrode_holder.py` + `cad/electrode-holder/` | Separate split carrier prototype, locating pilot, recessed dry band/wire channel, two STL halves/plate/coupon, manifest and reproducible mesh/electrical previews |
 | `cad/gripper/generate.py` + `dimensions.json` | Provisional collar and separate electrical-probe bracket parts |
 | `cad/modular-example/generate.py` + `example-config.json` | Reproducible modular rack files and mesh-based assembly preview |
 | `cad/three-electrode-print/generate.py` | Single-STL compact three-seat kit using production CAD, clustered feet, two fit coupons and plate manifest/preview |
@@ -103,3 +104,9 @@ The explorer submits `workspace_scan` with an ephemeral XYZ grid and fixed R to 
 Applying a map previews a largest-area grid-cell rectangle with accepted corner columns across the current minimum station Z to Travel Z; no combination of independent coordinate maxima is used. The full shape remains in the map; Cartesian bounds become that rectangle/required Z span, radial bounds remain unchanged, and calibration/fixture flags clear. Both calibration diagrams reuse Envelope for shaded support and station colours. Workspace feedback lists supported/rejected/unknown stations at the common required stroke. Changing geometry refreshes that feedback rather than silently deleting historical evidence.
 
 `fit_rack()` searches sampled anchors for a nearby placement covering every `rack_export_positions()` slot under map support and numerical bounds. It preserves layout/spacing and changes only rectangular X/Y or radial radius/start angle; UI previews before applying. It does not optimise physical obstacle or fixture footprints, transfer paths, or controller IK. All these actions only change profile values. The existing live route checks remain necessary.
+
+### Initial-electrode split carrier CAD
+
+The standalone experimental holder uses dimensions.json, not a loaded lab profile. It separates main body diameter (22 mm), pilot (18 mm × 1.5 mm) and flange (26 mm), so the app's legacy single-diameter holder parameters cannot represent it directly. Existing rack/holder exports and taught coordinates remain unchanged. Assembly Z=0 is pilot bottom, +Z toward terminal; a nominal 60 mm electrode body sits flush with the 20 mm carrier top, giving 41.5 mm below the deck. The manifest records invertible print transforms, geometry ID and nominal interface checks.
+
+The dry metal band, conductor, terminal socket, clamp hardware and stationary compliant cell contact are purchased/assembled parts. A sloped flange allows a suitably retracting contact to pass during vertical insertion; geometry alone does not establish spring force, no-snag behaviour or electrical continuity. Mesh tests check closed connected halves, rod/bolt/nut/washer clearance, nominal rack seat interface and print-plate bounds. Schematic wiring and fixture mounting are explanatory; no instrument pinout or fitted spring bracket is generated.

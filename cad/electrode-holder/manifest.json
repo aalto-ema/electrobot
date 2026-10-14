@@ -1,0 +1,170 @@
+{
+  "design": "6 mm electrode split carrier v1",
+  "units": "mm",
+  "dimensions": {
+    "electrode_body_diameter": 6.0,
+    "electrode_body_length_estimate": 60.0,
+    "terminal_length_estimate": 20.0,
+    "bore_clearance": 0.1,
+    "body_diameter": 22.0,
+    "flange_diameter": 26.0,
+    "pilot_height": 1.5,
+    "flange_thickness": 3.0,
+    "total_height": 20.0,
+    "split_gap": 0.4,
+    "bolt_diameter": 3.4,
+    "bolt_x": 6.3,
+    "bolt_z": 15.0,
+    "bolt_flat_y": 5.0,
+    "contact_z": 6.0,
+    "contact_width": 3.0,
+    "contact_recess": 0.25,
+    "wire_channel_radius": 0.8,
+    "printer_bed": [
+      220.0,
+      220.0
+    ],
+    "provenance": "Body diameter confirmed by user; body/terminal lengths estimated from ruler photo. Other dimensions are provisional.",
+    "pilot_diameter": 18.0,
+    "nut_across_flats": 5.8,
+    "nut_depth": 3.0
+  },
+  "parts": [
+    {
+      "file": "holder_rear.stl",
+      "quantity": 1,
+      "size_mm": [
+        25.986906051635742,
+        20.0,
+        12.799999997019768
+      ],
+      "print_bounds_mm": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          25.986906051635742,
+          20.0,
+          12.799999997019768
+        ]
+      ],
+      "assembly_bounds_mm": [
+        [
+          -12.993453025817871,
+          -13.0,
+          0.0
+        ],
+        [
+          12.993453025817871,
+          -0.20000000298023224,
+          20.0
+        ]
+      ],
+      "volume_mm3": 2987.031227197993,
+      "watertight": true,
+      "connected_solids": 1,
+      "plate_translation_mm": [
+        5.0,
+        5,
+        0
+      ],
+      "print_rotation_x_deg": -90,
+      "print_origin_translation_mm": [
+        12.993453025817871,
+        5.51091059616309e-16,
+        -0.20000000298023224
+      ]
+    },
+    {
+      "file": "holder_front.stl",
+      "quantity": 1,
+      "size_mm": [
+        25.986906051635742,
+        20.0,
+        12.799999997019768
+      ],
+      "print_bounds_mm": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          25.986906051635742,
+          20.0,
+          12.799999997019768
+        ]
+      ],
+      "assembly_bounds_mm": [
+        [
+          -12.993453025817871,
+          0.20000000298023224,
+          0.0
+        ],
+        [
+          12.993453025817871,
+          13.0,
+          20.0
+        ]
+      ],
+      "volume_mm3": 2883.8529336421975,
+      "watertight": true,
+      "connected_solids": 1,
+      "plate_translation_mm": [
+        34.98690605163574,
+        5,
+        0
+      ],
+      "print_rotation_x_deg": 90,
+      "print_origin_translation_mm": [
+        12.993453025817871,
+        20.0,
+        -0.20000000298023224
+      ]
+    }
+  ],
+  "geometry_id": "53cb78000b9c8bc3",
+  "assembly_frame": "Z=0 pilot bottom; +Z toward terminal; split plane Y=0; electrode axis X=Y=0",
+  "electrode_body_top_z_mm": 20.0,
+  "estimated_tip_z_mm": -40.0,
+  "estimated_hanging_below_deck_mm": 41.5,
+  "contact_center_z_mm": 7.5,
+  "minimum_contact_retraction_geometry_mm": 2.25,
+  "rack_interface": {
+    "pilot_diameter_mm": 18.0,
+    "pilot_depth_mm": 1.5,
+    "flange_diameter_mm": 26.0
+  },
+  "print_plate_bounds_mm": [
+    [
+      5.0,
+      5.0,
+      0.0
+    ],
+    [
+      60.973812103271484,
+      25.0,
+      12.799999997019768
+    ]
+  ],
+  "print_plate_solids": 2,
+  "fit_coupon": {
+    "file": "bore_fit_coupon.stl",
+    "quantity": 1,
+    "solids": 2,
+    "size_mm": [
+      21.986906051635742,
+      22.0,
+      4.0
+    ]
+  },
+  "purchased": [
+    "2 M3 x 12 bolts (provisional length), 2 M3 nuts, 2 compact M3 washers (OD <=6 mm) under bolt heads",
+    "3 mm wide thin copper foil strip; tinned copper tab and insulated wire",
+    "Removable socket or screw-clamp contact matched to measured electrode terminal",
+    "Separate compliant cell-mounted contact and its insulating mount; not supplied"
+  ],
+  "warning": "Prototype only. No demonstrated electrode/gripper fit, grip retention, chemical compatibility or electrical qualification."
+}

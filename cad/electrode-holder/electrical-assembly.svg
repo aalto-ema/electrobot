@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1120" viewBox="0 0 1400 1120">
+    <defs><style>text{font-family:Arial,sans-serif;fill:#233f4c;font-size:19px}.title{font-size:32px;font-weight:bold}.head{font-size:23px;font-weight:bold}.small{font-size:16px}.dim{stroke:#587783;stroke-width:1.5;fill:none}.wire{stroke:#d47623;stroke-width:5;fill:none;stroke-linejoin:round}.leader{stroke:#587783;stroke-width:1.5;fill:none}</style></defs>
+    <rect width="1400" height="1120" fill="#f5f8fa"/>
+    <text x="35" y="45" class="title">6 mm electrode holder + stationary electrical contact</text>
+    <text x="35" y="77">Prototype v1 · printed split carrier; purchased electrical parts · no robot-mounted cable</text>
+    <rect x="25" y="100" width="625" height="655" rx="15" fill="white" stroke="#d2dfe5"/>
+    <rect x="675" y="100" width="700" height="655" rx="15" fill="white" stroke="#d2dfe5"/>
+    <text x="45" y="135" class="head">A. Seated in the cell fixture — side view</text>
+    <text x="45" y="163" class="small">Electrode upright; electrical band stays above liquid.</text>
+
+<rect x="100" y="442.5" width="345" height="24" fill="#dbe8ed" stroke="#56717e" stroke-width="2"/>
+<rect x="189.0" y="442.5" width="112.0" height="12" fill="white" stroke="white" stroke-width="2"/>
+<rect x="230.0" y="350.0" width="30.0" height="300.0" fill="#435665" stroke="#56717e" stroke-width="2"/>
+<rect x="190.0" y="350.0" width="110.0" height="92.5" fill="#c1b4e0" stroke="#56717e" stroke-width="2"/>
+<rect x="200.0" y="442.5" width="90.0" height="7.5" fill="#c1b4e0" stroke="#56717e" stroke-width="2"/>
+<rect x="230.0" y="350.0" width="30.0" height="100.0" fill="#435665" stroke="#56717e" stroke-width="2"/>
+<polygon points="190.0,442.5 180.0,435.0 190.0,427.5 300.0,427.5 310.0,435.0 300.0,442.5" fill="#c1b4e0" stroke="#56717e" stroke-width="2"/>
+<rect x="230.0" y="427.5" width="30.0" height="15.0" fill="#435665" stroke="#56717e" stroke-width="2"/>
+<rect x="190.0" y="405.0" width="110.0" height="15.0" fill="#d7954f" stroke="#56717e" stroke-width="2"/>
+<rect x="230.0" y="405.0" width="30.0" height="15.0" fill="#435665" stroke="#56717e" stroke-width="2"/>
+<rect x="243" y="250.0" width="4" height="100.0" fill="#d5ac46" stroke="#56717e" stroke-width="2"/>
+<rect x="236" y="250.0" width="18" height="28" fill="#c7d1d8" stroke="#56717e" stroke-width="2"/>
+<path d="M 236 264.0 H 175.0 V 412.5 H 190.0" class="wire"/>
+<rect x="405" y="398.5" width="17" height="44.0" fill="#dbe8ed" stroke="#56717e" stroke-width="2"/>
+<path d="M 300.0 412.5 h 27 l 8 -8 l 8 16 l 8 -16 l 8 8 H 405" stroke="#b67b2e" stroke-width="3" fill="none"/>
+<path d="M 423 412.5 H 465 V 310 H 590" class="wire"/>
+<text x="470" y="300" class="">To WE lead</text>
+<text x="48" y="210" class="">Removable socket*</text>
+<path d="M 220 214 L 238 262.0" class="leader"/>
+<text x="338" y="247" class="">Metal terminal</text>
+<text x="338" y="269" class="small">≈20 mm exposed</text>
+<path d="M 334 276 L 248 310.0" class="leader"/>
+<text x="48" y="307" class="">Short insulated wire</text>
+<text x="48" y="329" class="small">Rear groove; shown offset</text>
+<text x="345" y="350" class="">Grip upper body</text>
+<text x="345" y="373" class="small">22 mm OD; upper gripping band</text>
+<path d="M 340 357 L 300.0 365.0" class="leader"/>
+<text x="452" y="401" class="">Spring contact*</text>
+<path d="M 448 406 L 370 412.5" class="leader"/>
+<text x="48" y="483" class="">26 mm flange</text>
+<path d="M 180 478 L 180.0 430" class="leader"/>
+<text x="335" y="490" class="">Cell cap / fixture*</text>
+<text x="335" y="526" class="">Remove the O-ring.</text>
+<text x="335" y="553" class="">6 mm body confirmed.</text>
+<text x="335" y="578" class="small">≈60 mm body length.</text>
+<path d="M 330 554 L 260.0 565" class="leader"/>
+<path d="M 115 584 H 438" stroke="#38a4ba" stroke-width="2" stroke-dasharray="7 5"/>
+<text x="335" y="611" class="small">Illustrative liquid level</text>
+<text x="48" y="695" class="small">Tip ≈41.5 mm below deck at this collar position.</text>
+<text x="48" y="721" class="small">*Socket, spring and cap mounting remain to be selected/measured.</text>
+<text x="700" y="135" class="head">B. Assembly and wiring</text>
+<text x="700" y="185" class="">1. Trial-fit the printed halves</text>
+<text x="700" y="212" class="small">Remove the O-ring. Fit around the upper insulating body.</text>
+<text x="700" y="242" class="">2. Clamp mechanically</text>
+<text x="700" y="269" class="small">Two M3 × 12 bolts, head washers and captive nuts; tighten gently.</text>
+<text x="700" y="299" class="small">The gap must remain; do not crush the electrode body.</text>
+<text x="700" y="329" class="">3. Make the dry contact band</text>
+<text x="700" y="356" class="small">Wrap a 3 mm wide copper strip in the recessed groove.</text>
+<text x="700" y="386" class="small">Attach its wire before fitting; keep solder bumps off the spring track.</text>
+<text x="700" y="416" class="">4. Connect the terminal</text>
+<text x="700" y="443" class="small">Use a removable socket matched to the measured pin diameter.</text>
+<text x="700" y="473" class="small">Insulate the socket/wire joint; do not solder to the electrode pin.</text>
+<text x="700" y="503" class="">5. Fit the stationary contact</text>
+<text x="700" y="530" class="small">On the CELL fixture: allow at least 3 mm lateral retraction.</text>
+<text x="700" y="560" class="small">Clear the flange, then press on the band; test force and clearance.</text>
+<text x="700" y="590" class="">6. Test with the potentiostat disconnected</text>
+<text x="700" y="617" class="small">Check terminal-to-band continuity and stable contact when seated.</text>
+<text x="700" y="647" class="small">Check the band is isolated from clamp bolts and other electrodes.</text>
+<text x="700" y="677" class="">7. Commission the mechanical sequence</text>
+<text x="700" y="704" class="small">Confirm release/retrieval, wire retention and full finger clearance.</text>
+<rect x="25" y="780" width="1350" height="310" rx="15" fill="#e7f1f4"/>
+    <text x="45" y="818" class="head">C. Electrical path — the robot only transports the carrier</text>
+    <g fill="white" stroke="#9bb9c5" stroke-width="2">
+    <rect x="45" y="845" width="220" height="65" rx="8"/>
+    <rect x="315" y="845" width="260" height="65" rx="8"/>
+    <rect x="625" y="845" width="280" height="65" rx="8"/>
+    <rect x="955" y="845" width="380" height="65" rx="8"/></g>
+    <text x="65" y="883">Electrode terminal</text><text x="332" y="883">Socket → wire → band</text>
+    <text x="642" y="883">Cell-mounted spring contact</text><text x="975" y="883">Existing potentiostat WE lead</text>
+    <path d="M 265 878 H 315 M 575 878 H 625 M 905 878 H 955" class="wire"/>
+    <text x="45" y="953">Printed: two clamp halves. Purchased: bolts, nuts, washers, band, wire, socket and stationary contact.</text>
+    <text x="45" y="984">Keep the band/socket above electrolyte AND rinse level. Cap seat carries weight; the contact does not set immersion.</text>
+    <text x="45" y="1015">Copper foil is a prototype contact: check oxidation, retention and resistance stability before measurements.</text>
+    <text x="45" y="1046">Cell OFF before handling. RE and CE stay connected at the cell. This drawing does not specify instrument connector pins.</text>
+    <text x="45" y="1076" class="small">Side-view fixture, terminal width, spring and wiring are explanatory. Printable dimensions come from dimensions.json / manifest.json.</text>
+    </svg>

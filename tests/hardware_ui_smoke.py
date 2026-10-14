@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 from types import SimpleNamespace
 sys.path.insert(0,str(Path(__file__).resolve().parent.parent))
-from PySide6.QtWidgets import QApplication,QMessageBox,QFileDialog
+from PySide6.QtWidgets import QApplication,QMessageBox,QFileDialog,QScrollArea
 from electrobot.app import Window,STYLE
 from electrobot.drivers import DobotRobot,PalmSensPotentiostat
 from test_drivers import FakeArm,FakeSDK
@@ -122,6 +122,38 @@ with tempfile.TemporaryDirectory() as d,patch.object(worker_module,'DobotRobot',
     assert not explorer.data['complete'] and w.device_state['homed']
     assert 'stop' not in arm.calls[calls:] and 'clear' not in arm.calls[calls:]
     explorer.close(); arm.limited=lambda p:False
+    from electrobot.workspace_map import scan_points
+    spec=dict(x_min=150,x_max=250,x_step=25,y_min=-50,y_max=50,y_step=25,
+              z_min=-20,z_max=80,z_step=25,r=0)
+    data=dict(format='electrobot-controller-workspace-v1',source='DobotLink.CheckPoseLimit',
+              started_utc='Mock controller map',spec=spec,complete=True,
+              points=[[*p,True,True] for p in scan_points(spec)])
+    explorer.display_map(data); calls=len(arm.calls)
+    anchor=dict(w.current_pose)
+    with patch.object(QMessageBox,'question',return_value=QMessageBox.StandardButton.Yes):
+        w.apply_workspace_map(data)
+        assert w.read_settings(validate=False).workspace_x_min==150
+        assert w.read_settings(validate=False).workspace_z_max==5
+        assert w.read_settings(validate=False).workspace_map==data
+        assert not w.fields['calibrated'].isChecked()
+        w.fields['rack_x'].setValue(280)
+        assert 'Unknown' in w.map_feedback.text()
+        w.preview_rack_fit()
+    assert w.current_pose==anchor and not any(c=='clear' or c=='stop' or isinstance(c,tuple) and c[0] in ('move','home','grip') for c in arm.calls[calls:])
+    assert 'Supported' in w.map_feedback.text()
+    w.nav.setCurrentRow(2); w.settings_tabs.setCurrentIndex(3)
+    w.resize(1440,960); app.processEvents()
+    scroll=w.settings_tabs.currentWidget().findChild(QScrollArea)
+    scroll.verticalScrollBar().setValue(scroll.verticalScrollBar().maximum()); app.processEvents()
+    w.grab().save('cad/ui-mapped-workspace.png')
+    w.resize(1120,760); app.processEvents()
+    scroll.ensureWidgetVisible(w.fit_rack_button,0,12); app.processEvents()
+    w.grab().save('cad/ui-mapped-workspace-compact.png')
+    explorer.resize(1100,820); explorer.show(); app.processEvents()
+    explorer.grab().save('cad/ui-workspace-explorer.png')
+    explorer.resize(920,720); app.processEvents()
+    assert explorer.width()<=920 and explorer.height()<=720
+    explorer.grab().save('cad/ui-workspace-explorer-compact.png'); explorer.close()
     w.fields['calibrated'].setChecked(True); w.fields['rack_x'].setValue(191); assert not w.fields['calibrated'].isChecked()
     w.submit('grip',True); idle(); w.disconnect_devices(); assert not w.busy and w.device_state['robot']
     w.close(); app.processEvents(); assert w.isVisible() and w.worker.isRunning()

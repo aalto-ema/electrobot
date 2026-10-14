@@ -140,6 +140,7 @@ class Window(QMainWindow):
         if self.robot_diagnostics and invalidate:
             self.robot_diagnostics['preflight']='Not checked for current settings'
             self.update_diagnostic_labels()
+        self.update_map_feedback(s)
         self.validation_issues=s.calibration_issues()
         try: s.validate()
         except ValueError as exc:
@@ -343,6 +344,11 @@ class Window(QMainWindow):
         bounds.addWidget(self.settings_group('Radial bounds from base (mm)', [('workspace_radius_min','Minimum radius',0,400),('workspace_radius_max','Maximum radius',1,400)]))
         bounds.addWidget(self.settings_group('Rinse footprint (mm)', [('rinse_beaker_diameter','Rinse beaker diameter',10,250)]))
         bounds.addWidget(self.settings_group('Controller reachability and fault detection', [('controller_preflight','Check controller pose limits before movement'),('reachability_step','Route sample spacing (mm)',1,50),('motion_stall_timeout','No-progress timeout (s)',1,60)]))
+        self.map_feedback=self.note('No controller workspace map applied.')
+        bounds.addWidget(self.map_feedback)
+        mapped=QHBoxLayout(); self.fit_rack_button=button('Fit rack within mapped workspace…',self.preview_rack_fit)
+        self.clear_map_button=button('Remove saved map',self.clear_workspace_map)
+        mapped.addWidget(self.fit_rack_button); mapped.addWidget(self.clear_map_button); bounds.addLayout(mapped)
         self.route_check=button('Check planned route · no movement',lambda:self.submit('check_route')); bounds.addWidget(self.route_check)
         bounds.addWidget(button('Workspace explorer…',self.open_workspace_explorer))
         bounds.addWidget(self.note('Connected/homed Hardware robot required. Asks DobotLink CheckPoseLimit about XYZ/R at station heights, Travel Z and sampled straight transfers. This detects supported controller limits, not obstacles or full collision clearance. Unsupported firmware blocks this check; disabling it explicitly leaves configured bounds, alarm monitoring and the progress watchdog. A passed check applies only to that settings snapshot.'))
@@ -397,8 +403,71 @@ class Window(QMainWindow):
             self.workspace_explorer.scan_requested.connect(self.start_workspace_scan)
             self.workspace_explorer.cancel_requested.connect(self.cancel_workspace_scan)
             self.workspace_explorer.target_selected.connect(self.copy_workspace_target)
+            self.workspace_explorer.workspace_selected.connect(self.apply_workspace_map)
+        if not self.workspace_explorer.data and settings.workspace_map:
+            self.workspace_explorer.display_map(settings.workspace_map)
         self.workspace_explorer.settings=settings
         self.refresh_controls(); self.workspace_explorer.show(); self.workspace_explorer.raise_()
+    def apply_workspace_map(self,data):
+        if self.busy: return
+        from copy import deepcopy
+        from dataclasses import replace
+        from .workspace_map import Envelope
+        s=self.read_settings(validate=False)
+        low=min(s.rack_z,s.cell_z,s.rinse_z); high=s.safe_z
+        try:
+            envelope=Envelope(data); xmin,xmax,ymin,ymax=envelope.rectangle(low,high,s.tool_r)
+            if low>=high: raise ValueError('Travel Z must be above the station heights.')
+        except (ValueError,KeyError,TypeError) as exc:
+            QMessageBox.warning(self,'Workspace cannot be applied',str(exc)); return
+        text=(f'Current experiment Z span: {low:g} to {high:g} mm, R {s.tool_r:g}°.\n'
+              f'Proposed X bounds: {xmin:g} to {xmax:g}; Y: {ymin:g} to {ymax:g} mm.\n'
+              'Save the full map and replace XYZ bounds with this rectangle and Z span? '
+              'Radial bounds stay in effect. Rack/cell/rinse positions and Travel Z are unchanged.\n'
+              'The rectangle groups accepted corner samples; its interior is untested. '
+              'Historical maps require rechecking on current hardware. No movement will occur.')
+        if QMessageBox.question(self,'Use controller workspace',text)!=QMessageBox.StandardButton.Yes: return
+        self.apply_settings(replace(s,workspace_map=deepcopy(data),workspace_x_min=xmin,workspace_x_max=xmax,
+            workspace_y_min=ymin,workspace_y_max=ymax,workspace_z_min=low,workspace_z_max=high,
+            calibrated=False,fixture_verified=False))
+        self.workspace_explorer.settings=self.read_settings(validate=False); self.workspace_explorer.plot.update()
+        self.statusBar().showMessage('Workspace applied to this profile. Save configuration to persist it; station positions still need review.')
+    def clear_workspace_map(self):
+        if self.busy: return
+        from dataclasses import replace
+        self.apply_settings(replace(self.read_settings(validate=False),workspace_map={},calibrated=False,fixture_verified=False))
+        self.statusBar().showMessage('Saved map removed; numerical bounds retained.')
+    def preview_rack_fit(self):
+        if self.busy: return
+        from .workspace_map import fit_rack
+        from dataclasses import replace
+        s=self.read_settings(validate=False)
+        try: proposed=fit_rack(s,s.workspace_map)
+        except (ValueError,KeyError,TypeError) as exc:
+            QMessageBox.warning(self,'Rack placement',str(exc)); return
+        keys=('rack_radius','rack_start_angle') if s.rack_layout=='radial' else ('rack_x','rack_y')
+        changes='\n'.join(f'{key}: {getattr(s,key):g} → {getattr(proposed,key):g}' for key in keys)
+        if QMessageBox.question(self,'Preview rack placement',changes+'\nPreserves spacing and layout; checks all exported slots against surrounding map samples and numerical bounds. Cell/rinse positions stay fixed.\nApply without moving? Physical clearance and current controller route still need checking.')==QMessageBox.StandardButton.Yes:
+            self.apply_settings(replace(proposed,calibrated=False,fixture_verified=False))
+    def update_map_feedback(self,s):
+        if not hasattr(self,'map_feedback'): return
+        self.fit_rack_button.setEnabled(not self.busy and bool(s.workspace_map))
+        self.clear_map_button.setEnabled(not self.busy and bool(s.workspace_map))
+        if not s.workspace_map:
+            self.map_feedback.setText('No controller map applied. Open Workspace explorer to scan or load one.'); return
+        from .workspace_map import Envelope
+        try:
+            envelope=Envelope(s.workspace_map); low=min(s.rack_z,s.cell_z,s.rinse_z)
+            groups={True:[],False:[],None:[]}
+            stations=[(f'Rack {i}',s.rack_pose(i)) for i in range(s.first_electrode,min(101,s.first_electrode+s.electrodes))]
+            stations += [('Cell',(s.cell_x,s.cell_y,s.cell_z)),('Rinse',(s.rinse_x,s.rinse_y,s.rinse_z))]
+            for label,pose in stations: groups[envelope.status(*pose[:2],low,s.safe_z,s.tool_r)].append(label)
+            lines=[f'Saved controller map: {s.workspace_map.get("started_utc","unknown date")} · required Z {low:g}…{s.safe_z:g}, R {s.tool_r:g}°']
+            for state,label in ((True,'Supported by surrounding samples'),(False,'Rejected supporting samples'),(None,'Unknown: outside scan, missing samples or different R')):
+                if groups[state]: lines.append(label+': '+', '.join(groups[state]))
+            lines.append('Planning feedback only; green interiors are untested. Recheck the current controller route; no obstacle model.')
+            self.map_feedback.setText('\n'.join(lines))
+        except (ValueError,KeyError,TypeError) as exc: self.map_feedback.setText('Invalid saved workspace map: '+str(exc))
     def start_workspace_scan(self,spec):
         self.submit('workspace_scan',spec)
         if self.active_command!='workspace_scan':
@@ -487,6 +556,7 @@ class Window(QMainWindow):
         for key in ('rack_x','rack_y'): self.fields[key].setEnabled(idle and not radial)
         self.placement_export.setEnabled(idle); self.rack_export.setEnabled(idle)
         self.lattice_preset.setEnabled(idle)
+        self.update_map_feedback(self.read_settings(validate=False))
         can_check=idle and hardware and d.get('robot',False) and d.get('homed',False)
         if self.workspace_explorer: self.workspace_explorer.set_available(can_check)
         self.route_check.setEnabled(can_check); self.manual_route_check.setEnabled(can_check)

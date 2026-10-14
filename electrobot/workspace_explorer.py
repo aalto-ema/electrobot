@@ -14,7 +14,7 @@ from .workspace_map import scan_axes,validate_saved_map
 class WorkspacePlot(QWidget):
     selected=Signal(float,float)
     def __init__(self,explorer):
-        super().__init__(); self.explorer=explorer; self.setMinimumSize(420,330); self.points={}; self.axes=None; self.choice=None
+        super().__init__(); self.explorer=explorer; self.setMinimumSize(360,270); self.points={}; self.axes=None; self.choice=None
     def transform(self):
         xs,ys,_=self.axes
         scale=min((self.width()-80)/max(50,xs[-1]-xs[0]),(self.height()-85)/max(50,ys[-1]-ys[0]))
@@ -32,6 +32,13 @@ class WorkspacePlot(QWidget):
             p.drawText(20,75,'Scan a Z height or load a saved map. No robot movement.'); p.end(); return
         xy,scale=self.transform(); xs,ys,zs=self.axes
         radius=max(3,min(9,scale*min(self.explorer.data['spec']['x_step'],self.explorer.data['spec']['y_step'])*.25))
+        for a,b in zip(xs,xs[1:]):
+            for c,d in zip(ys,ys[1:]):
+                states=[self.state(x,y) for x in (a,b) for y in (c,d)]
+                state=True if all(v is True for v in states) else False if any(v is False for v in states) else None
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QColor('#d8eee8' if state is True else '#f5dfdb' if state is False else '#e4e9ed'))
+                p.drawRect(QRectF(xy(a,d),xy(b,c)).normalized())
         for x in xs:
             for y in ys:
                 state=self.state(x,y); color='#0b9b82' if state is True else '#d07b71' if state is False else '#c9d3da'
@@ -48,7 +55,7 @@ class WorkspacePlot(QWidget):
             p.setPen(QPen(QColor('#d97706'),2)); p.setBrush(Qt.BrushStyle.NoBrush); p.drawEllipse(xy(*self.choice),12,12)
         p.setPen(QColor('#234452'))
         p.drawText(12,self.height()-38,f'X {xs[0]:g}…{xs[-1]:g}  |  Y {ys[0]:g}…{ys[-1]:g}')
-        p.drawText(12,self.height()-17,'Green: accepted samples  Red: rejected  Grey: not queried; no interpolation')
+        p.drawText(12,self.height()-17,'Green: accepted samples  Red: rejected  Grey: unknown; shading groups corner samples')
         p.end()
     def mousePressEvent(self,event):
         if not self.axes: return
@@ -60,7 +67,7 @@ class WorkspacePlot(QWidget):
 
 
 class WorkspaceExplorer(QDialog):
-    scan_requested=Signal(dict); cancel_requested=Signal(); target_selected=Signal(tuple)
+    scan_requested=Signal(dict); cancel_requested=Signal(); target_selected=Signal(tuple); workspace_selected=Signal(dict)
     def __init__(self,parent,settings):
         super().__init__(parent); self.settings=settings; self.data={}; self.scanning=False; self.allowed=False
         self.setWindowTitle('Workspace explorer — query limits without moving'); self.resize(1100,820)
@@ -95,6 +102,11 @@ class WorkspaceExplorer(QDialog):
         side.addWidget(self.table,1); self.copy_target=QPushButton('Copy selected pose to Manual target · no move'); side.addWidget(self.copy_target)
         self.copy_target.clicked.connect(self.copy_pose); body.addLayout(side,2); layout.addLayout(body,1)
         legend=QLabel('C/R and numbered squares are current station XY projections; they do not certify their heights. Maps apply to the scanned R and controller/tool configuration.\nUse Check planned route before handling; sampled vertical acceptance does not certify every intermediate pose. Loading/copying a map never moves or teaches the arm.'); legend.setWordWrap(True); layout.addWidget(legend)
+        use=QHBoxLayout(); self.use_workspace=QPushButton('Use this workspace in Settings…')
+        self.use_workspace.clicked.connect(lambda:self.workspace_selected.emit(self.data))
+        use.addWidget(self.use_workspace)
+        use_note=QLabel('Uses the current experiment Z span; preview bounds before applying.'); use_note.setWordWrap(True); use.addWidget(use_note)
+        layout.addLayout(use)
         self.plot.selected.connect(self.select_column); self.view.currentIndexChanged.connect(self.refresh_view)
         self.estimate(); self.update_buttons()
     def spec(self): return {**{k:f.value() for k,f in self.inputs.items()},'r':self.r.value()}
@@ -110,6 +122,7 @@ class WorkspaceExplorer(QDialog):
         for widget in [*self.inputs.values(),self.r]: widget.setEnabled(not self.scanning)
         for b in (self.save,self.csv): b.setEnabled(bool(self.data.get('points')) and not self.scanning)
         self.copy_target.setEnabled(bool(self.selected_pose()) and not self.scanning)
+        self.use_workspace.setEnabled(bool(self.data.get('points')) and not self.scanning)
     def start_scan(self):
         try: scan_axes(self.spec())
         except ValueError as exc: QMessageBox.warning(self,'Scan parameters',str(exc)); return
@@ -119,6 +132,10 @@ class WorkspaceExplorer(QDialog):
         kind=event['kind']
         if kind=='start':
             self.data={**event['metadata'],'points':[]}; self.plot.points={}; self.plot.choice=None
+            for key,field in self.inputs.items():
+                field.blockSignals(True); field.setValue(self.data['spec'][key]); field.blockSignals(False)
+            self.r.setValue(self.data['spec']['r']); self.estimate()
+            self.selection.setText('Click an XY sample to inspect its Z results.')
             self.plot.axes=scan_axes(self.data['spec']); self.view.blockSignals(True); self.view.clear()
             self.view.addItem('All sampled Z heights · vertical-span intersection',None)
             for z in self.plot.axes[2]: self.view.addItem(f'Z = {z:g} mm',z)
@@ -170,12 +187,15 @@ class WorkspaceExplorer(QDialog):
         name,_=QFileDialog.getOpenFileName(self,'Load controller workspace map','','JSON (*.json)')
         if not name: return
         try:
-            data=validate_saved_map(json.loads(Path(name).read_text())); points=data.pop('points')
-            self.handle_event({'kind':'start','metadata':data,'total':math.prod(len(a) for a in scan_axes(data['spec']))})
-            self.data['points']=points; self.plot.points={tuple(p[:3]):p[4] for p in points}
-            self.scanning=False; self.progress.setValue(len(points)); self.plot.update(); self.update_buttons()
-            self.status.setText(f'Saved map from {data.get("started_utc","unknown time")} at R={data["spec"]["r"]:g}°. Historical query data; recheck on current hardware.')
+            self.display_map(json.loads(Path(name).read_text()))
         except Exception as exc: QMessageBox.warning(self,'Cannot load map',str(exc))
+    def display_map(self,source):
+        from copy import deepcopy
+        data=validate_saved_map(deepcopy(source)); points=data.pop('points')
+        self.handle_event({'kind':'start','metadata':data,'total':math.prod(len(a) for a in scan_axes(data['spec']))})
+        self.data['points']=points; self.plot.points={tuple(p[:3]):p[4] for p in points}
+        self.scanning=False; self.progress.setValue(len(points)); self.plot.update(); self.update_buttons()
+        self.status.setText(f'Saved map from {data.get("started_utc","unknown time")} at R={data["spec"]["r"]:g}°. Historical query data; recheck on current hardware.')
     def closeEvent(self,event):
         if self.scanning: self.cancel_requested.emit()
         event.accept()

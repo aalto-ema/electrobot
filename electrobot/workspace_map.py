@@ -41,3 +41,76 @@ def validate_saved_map(data):
         seen.add(tuple(p[:4]))
     if data.get('complete') and len(seen)!=len(allowed): raise ValueError('Complete map has missing samples')
     return data
+
+
+class Envelope:
+    """Planning support from surrounding samples, never continuous reach proof."""
+    def __init__(self,data):
+        self.data=validate_saved_map(data)
+        self.xs,self.ys,self.zs=scan_axes(data['spec'])
+        self.points={tuple(p[:3]):p[4] for p in data['points']}
+
+    @staticmethod
+    def bracket(axis,value):
+        if value<axis[0] or value>axis[-1]: return []
+        if value in axis: return [value]
+        for a,b in zip(axis,axis[1:]):
+            if a<value<b: return [a,b]
+        return []
+
+    def status(self,x,y,low,high,r):
+        if not math.isclose(r,self.data['spec']['r'],abs_tol=.001): return None
+        xs,ys=self.bracket(self.xs,x),self.bracket(self.ys,y)
+        a,b=self.bracket(self.zs,low),self.bracket(self.zs,high)
+        if not xs or not ys or not a or not b or low>high: return None
+        zs=[z for z in self.zs if min(a)<=z<=max(b)]
+        values=[self.points.get((xx,yy,z)) for xx in xs for yy in ys for z in zs]
+        if any(v is False for v in values): return False
+        return True if all(v is True for v in values) else None
+
+    def rectangle(self,low,high,r):
+        """Largest area grid rectangle whose cells have accepted corner columns."""
+        heights=[0]*(len(self.xs)-1); best=None; area=0
+        for j in range(len(self.ys)-1):
+            for i in range(len(heights)):
+                good=all(self.status(x,y,low,high,r) is True
+                         for x in self.xs[i:i+2] for y in self.ys[j:j+2])
+                heights[i]=heights[i]+1 if good else 0
+            stack=[]
+            for i,h in enumerate(heights+[0]):
+                start=i
+                while stack and stack[-1][1]>h:
+                    left,height=stack.pop(); start=left
+                    bounds=(self.xs[left],self.xs[i],self.ys[j-height+1],self.ys[j+1])
+                    size=(bounds[1]-bounds[0])*(bounds[3]-bounds[2])
+                    if size>area: area=size; best=bounds
+                if not stack or stack[-1][1]<h: stack.append((start,h))
+        if best is None: raise ValueError('No accepted XY rectangle covers this Z range and R. Scan more heights/area or refine the grid.')
+        return best
+
+
+def fit_rack(settings,data):
+    """Preview a nearest sampled anchor; preserve layout, slot mapping and spacing."""
+    from dataclasses import replace
+    envelope=Envelope(data); candidates=[]
+    low=min(settings.rack_z,settings.cell_z,settings.rinse_z); high=settings.safe_z
+    original=settings.rack_pose(1)
+    for y in envelope.ys:
+        for x in envelope.xs:
+            if settings.rack_layout=='radial':
+                radius=math.hypot(x,y)
+                angle=math.degrees(math.atan2(y,x))
+                candidate=replace(settings,rack_radius=radius,rack_start_angle=angle)
+            else: candidate=replace(settings,rack_x=x,rack_y=y)
+            good=True
+            for pose in candidate.rack_export_positions():
+                if envelope.status(*pose[:2],low,high,candidate.tool_r) is not True:
+                    good=False; break
+                try:
+                    candidate.validate_pose(pose)
+                    candidate.validate_pose((*pose[:2],high,candidate.tool_r))
+                except ValueError: good=False; break
+            if good and any(message.startswith('Rack slots need') for _,message in candidate.calibration_issues()): good=False
+            if good: candidates.append((math.dist(original[:2],(x,y)),candidate))
+    if not candidates: raise ValueError('No rack placement fits the supported map and configured bounds. Reduce rack size, adjust spacing or scan a larger area.')
+    return min(candidates,key=lambda item:item[0])[1]

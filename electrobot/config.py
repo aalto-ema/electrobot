@@ -1,8 +1,9 @@
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 import math
 
 @dataclass
 class Settings:
+    workspace_map: dict = field(default_factory=dict)
     mode: str = 'simulation'
     run_name: str = 'Electrode screening'
     first_electrode: int = 1
@@ -143,6 +144,9 @@ class Settings:
                     'rotation_tolerance','grip_dwell','sdk_timeout','reachability_step','motion_stall_timeout'):
             if getattr(self,key) <= 0:
                 raise ValueError(f'{key} must be positive')
+        if self.workspace_map:
+            from .workspace_map import validate_saved_map
+            validate_saved_map(self.workspace_map)
         for axis in 'xyz':
             if getattr(self,f'workspace_{axis}_min') >= getattr(self,f'workspace_{axis}_max'):
                 raise ValueError(f'Invalid workspace {axis.upper()} bounds')

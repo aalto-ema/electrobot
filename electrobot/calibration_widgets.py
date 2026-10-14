@@ -20,7 +20,13 @@ class CalibrationDiagram(QWidget):
     def __init__(self,workspace=False):
         super().__init__(); self.workspace=workspace; self.settings=None; self.pose=None
         self.setMinimumHeight(410); self.setMinimumWidth(450)
-    def set_settings(self,s): self.settings=s; self.update()
+    def set_settings(self,s):
+        self.settings=s; self.envelope=None
+        if s.workspace_map:
+            from .workspace_map import Envelope
+            try: self.envelope=Envelope(s.workspace_map)
+            except (ValueError,KeyError,TypeError): pass
+        self.update()
     def set_pose(self,pose): self.pose=dict(pose) if pose else None; self.update()
     def paintEvent(self,event):
         if self.settings is None: return
@@ -52,11 +58,24 @@ class CalibrationDiagram(QWidget):
         scale=min(390/max(1,xhi-xlo),255/max(1,yhi-ylo))*.92
         xc,yc=(xlo+xhi)/2,(ylo+yhi)/2
         def xy(x,y): return QPointF(250+(x-xc)*scale,179-(y-yc)*scale)
+        def map_color(x,y,default):
+            if not getattr(self,'envelope',None): return default
+            state=self.envelope.status(x,y,min(s.rack_z,s.cell_z,s.rinse_z),s.safe_z,s.tool_r)
+            return '#0b9b82' if state is True else '#c34848' if state is False else '#8198a5'
         base=xy(0,0)
         if self.workspace:
             p.setPen(QPen(QColor('#c6d8e0'),1.5)); p.setBrush(QColor('#e3eff2'))
             r=s.workspace_radius_max*scale; p.drawEllipse(base,r,r)
             p.setBrush(QColor('#f4f8fa')); r=s.workspace_radius_min*scale; p.drawEllipse(base,r,r); p.setBrush(Qt.BrushStyle.NoBrush)
+        if getattr(self,'envelope',None):
+            env=self.envelope
+            p.setPen(Qt.PenStyle.NoPen)
+            for a,b in zip(env.xs,env.xs[1:]):
+                for c,d in zip(env.ys,env.ys[1:]):
+                    color=map_color((a+b)/2,(c+d)/2,'#8198a5')
+                    fill=QColor(color); fill.setAlpha(45); p.setBrush(fill)
+                    p.drawRect(QRectF(xy(a,d),xy(b,c)).normalized())
+            p.setBrush(Qt.BrushStyle.NoBrush)
         a=xy(s.workspace_x_min,s.workspace_y_max); b=xy(s.workspace_x_max,s.workspace_y_min)
         p.setPen(QPen(QColor('#635bce'),1.5)); p.drawRect(QRectF(a,b).normalized())
         line(xy(xlo,0).x(),base.y(),xy(xhi,0).x(),base.y(),'#c6d8e0')
@@ -64,15 +83,15 @@ class CalibrationDiagram(QWidget):
         dot(base.x(),base.y(),'#8198a5',3); text(base.x()+5,base.y()-6,'0,0')
         text(433,310,'+X →'); text(20,60,'+Y ↑')
         for index,x,y,z,selected in points:
-            pos=xy(x,y); dot(pos.x(),pos.y(),'#635bce' if selected else '#aebdca',2.5,selected)
+            pos=xy(x,y); dot(pos.x(),pos.y(),map_color(x,y,'#635bce') if selected else '#aebdca',2.5,selected)
         for x,y,color,label in ((s.cell_x,s.cell_y,'#0e9f92','Cell'),(s.rinse_x,s.rinse_y,'#3285c8','Rinse')):
-            pos=xy(x,y); dot(pos.x(),pos.y(),color,5); text(pos.x()+8,pos.y()-8,label)
+            pos=xy(x,y); dot(pos.x(),pos.y(),map_color(x,y,color),5); text(pos.x()+8,pos.y()-8,label)
         if self.pose:
             pos=xy(self.pose['x'],self.pose['y']); dot(pos.x(),pos.y(),'#d97706',7,False); text(pos.x()+8,pos.y()+17,'Robot')
         if self.workspace:
             text(20,334,f'X [{s.workspace_x_min:g}, {s.workspace_x_max:g}]   Y [{s.workspace_y_min:g}, {s.workspace_y_max:g}] mm')
             text(20,356,f'Radius [{s.workspace_radius_min:g}, {s.workspace_radius_max:g}] mm from base')
-            text(20,378,'Allowed XY = rectangle ∩ radial band')
+            text(20,378,'Map: green support / red rejection / grey unknown' if s.workspace_map else 'Allowed XY = rectangle ∩ radial band')
             columns,rows,_=rack_layout(s)
             text(510,334,f'{s.rack_layout.title()} rack: {columns} slots/row × {rows}; pitch {s.rack_pitch:g} mm')
         else:
@@ -85,10 +104,12 @@ class CalibrationDiagram(QWidget):
         live_z=self.pose['z'] if self.pose else s.safe_z
         zlo=min(s.workspace_z_min,s.workspace_z_max,s.rack_z,s.cell_z,s.rinse_z,s.safe_z,live_z)
         zhi=max(s.workspace_z_min,s.workspace_z_max,s.rack_z,s.cell_z,s.rinse_z,s.safe_z,live_z)
+        if zhi-zlo<50:
+            middle=(zlo+zhi)/2; zlo,zhi=middle-25,middle+25
         def zy(z): return 300-(z-zlo)/max(1,zhi-zlo)*235
         line(540,zy(zlo),540,zy(zhi),'#8198a5')
         for z,name,color in ((s.workspace_z_max,'Z max','#635bce'),(s.workspace_z_min,'Z min','#635bce'),(s.safe_z,'Travel Z','#0e9f92')):
-            y=zy(z); line(540,y,940,y,color,name=='Travel Z'); text(550,y-5,f'{name} {z:g} mm')
+            y=zy(z); line(540,y,940,y,color,name=='Travel Z'); text(800 if name.startswith('Z ') else 550,y-5,f'{name} {z:g} mm')
         for x,z,label in ((635,s.rack_z,'Rack grip'),(760,s.cell_z,'Cell seat'),(885,s.rinse_z,'Rinse dip')):
             line(x,zy(s.safe_z),x,zy(z)); dot(x,zy(z)); text(x-37,zy(z)+18,label); text(x-30,zy(z)+35,f'Z={z:g}')
         if self.pose:

@@ -4,6 +4,8 @@ This is the new **stationary cell contact** prototype. It does not automatically
 
 ## Latest concept: fixed bottom contacts (2026-10-14)
 
+**Printable prototype now available:** see [`../fixed-contact-prototype`](../fixed-contact-prototype/README.md) for the fixed-contact holder, insert, cover, bench stand and coupons. The files in this older directory remain the side-band design.
+
 The user-selected next design uses a copper ring on the bottom face of the holder's narrower lower section and two **fixed metal bars** on the ledge of a removable cup-shaped insert. A small holder passage carries the insulated wire from the ring to the top terminal socket. Two symmetric wire channels in the insert meet at one recessed junction for the WE cable. The copper ring must reach the bars before another plastic surface stops insertion; contact flatness and repeatable continuity remain untested. Bar/wire sizes and insert-to-cap dimensions remain to be selected.
 
 ![Fixed-contact concept and wire routing](fixed-contact-concept.png)

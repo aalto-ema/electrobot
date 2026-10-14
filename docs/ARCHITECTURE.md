@@ -38,6 +38,8 @@ Station/transfer settings use reported tool Z. CAD uses physical bench height an
 
 Geometry changes clear relevant readiness flags. `calibration_issues()` feeds inline messages, field highlights and start eligibility. `validate()` checks broader parameter consistency, and `validate_batch()` adds hardware readiness/pose checks. Extending settings should keep these layers coherent.
 
+Configured Cartesian/radial bounds use a fixed 0.0001 mm numerical allowance in pose and calibration validation, to accommodate controller floating-point feedback near a boundary. It is separate from motion-completion tolerance; poses are not rounded or clamped, and controller reachability queries still receive the original coordinates.
+
 ### Controller reachability and motion diagnostics
 
 `Settings.planned_route(initial)` enumerates selected rack/cell/rinse handling waypoints, including initial lift, all station Z values, Travel Z and rinse repetitions. Before hardware handling, the driver queries `Magician.CheckPoseLimit` without movement using Cartesian XYZ/R (`isJoint=False`). It checks route samples at configurable spacing (default 10 mm, with at most 5° between R samples), including the exact closest XY approach to the base for the configured inner radius. A per-command cache avoids repeating identical controller queries. Manual moves also check the current-to-target segment. This detects supported controller pose limits at samples, not obstacles, continuous-path clearance, all IK branches or firmware-independent kinematics. Home remains an explicit controller operation outside these straight-move checks.

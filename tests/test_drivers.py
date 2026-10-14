@@ -95,6 +95,23 @@ class DriverTests(unittest.TestCase):
         self.assertFalse(any(isinstance(c,tuple) and c[0]=='move' for c in r.arm.calls))
         r.disconnect()
 
+    def test_move_from_boundary_feedback_noise_still_checks_controller(self):
+        r=self.robot(workspace_z_min=0); r.home()
+        r.arm.current['z']=-3.57628e-06
+        with patch.dict('sys.modules',{'dobotkit':SimpleNamespace(PTPMode=SimpleNamespace(MOVL_XYZ=2))}):
+            r.move((200,0,10,0))
+        queries=[c[2] for c in r.arm.calls if isinstance(c,tuple) and c[:2]==('rpc','CheckPoseLimit')]
+        self.assertTrue(any(p['z']==-3.57628e-06 for p in queries))
+        self.assertEqual(r.pose()['z'],10)
+        r.arm.current['z']=-3.57628e-06
+        r.arm.limited=lambda p:p['z']<0
+        r._checked.clear()
+        moves=sum(isinstance(c,tuple) and c[0]=='move' for c in r.arm.calls)
+        with self.assertRaisesRegex(RuntimeError,'Controller rejected'):
+            r.move((200,0,20,0))
+        self.assertEqual(sum(isinstance(c,tuple) and c[0]=='move' for c in r.arm.calls),moves)
+        r.disconnect()
+
     def test_controller_rejects_height_before_any_motion(self):
         r=self.robot(safe_z=100); r.home(); r.arm.current['z']=68.8
         r.arm.limited=lambda p:p['z']>70

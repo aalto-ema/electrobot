@@ -1,6 +1,13 @@
 from dataclasses import dataclass, asdict, field
 import math
 
+# Numerical allowance in mm for controller float feedback and geometry arithmetic.
+# Separate from the much larger motion-completion position tolerance.
+WORKSPACE_EPSILON_MM = 1e-4
+
+def within_workspace(value,lower,upper):
+    return lower-WORKSPACE_EPSILON_MM <= value <= upper+WORKSPACE_EPSILON_MM
+
 @dataclass
 class Settings:
     workspace_map: dict = field(default_factory=dict)
@@ -285,10 +292,10 @@ class Settings:
         if len(pose) not in (3,4) or not all(math.isfinite(v) for v in pose):
             raise ValueError('Pose must have finite XYZ and optional R values')
         for axis,value in zip('xyz',pose):
-            if not getattr(self,f'workspace_{axis}_min') <= value <= getattr(self,f'workspace_{axis}_max'):
+            if not within_workspace(value,getattr(self,f'workspace_{axis}_min'),getattr(self,f'workspace_{axis}_max')):
                 raise ValueError(f'{axis.upper()} target {value:g} lies outside configured workspace')
         radius=math.hypot(pose[0],pose[1])
-        if not self.workspace_radius_min <= radius <= self.workspace_radius_max:
+        if not within_workspace(radius,self.workspace_radius_min,self.workspace_radius_max):
             raise ValueError(f'Target radius {radius:.1f} mm lies outside configured workspace')
         if len(pose)==4 and not -90 <= pose[3] <= 90:
             raise ValueError('Tool rotation must be within ±90 degrees')
@@ -320,11 +327,11 @@ class Settings:
         for label,pose,keys in stations:
             for axis,value in zip('xyz',pose):
                 a,b=f'workspace_{axis}_min',f'workspace_{axis}_max'
-                if not getattr(self,a)<=value<=getattr(self,b): add((*keys,a,b),f'{label} {axis.upper()}={value:g} mm is outside workspace limits.')
+                if not within_workspace(value,getattr(self,a),getattr(self,b)): add((*keys,a,b),f'{label} {axis.upper()}={value:g} mm is outside workspace limits.')
             radius=math.hypot(*pose[:2])
-            if not self.workspace_radius_min<=radius<=self.workspace_radius_max:
+            if not within_workspace(radius,self.workspace_radius_min,self.workspace_radius_max):
                 add((*keys,'workspace_radius_min','workspace_radius_max'),f'{label} radius {radius:.1f} mm is outside the radial band.')
-        if not self.workspace_z_min<=self.safe_z<=self.workspace_z_max:
+        if not within_workspace(self.safe_z,self.workspace_z_min,self.workspace_z_max):
             add(('safe_z','workspace_z_min','workspace_z_max'),'Travel Z is outside workspace Z limits.')
         return issues
 

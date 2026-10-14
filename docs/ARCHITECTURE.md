@@ -13,6 +13,7 @@ This document maps implementation responsibilities. User setup and operation bel
 | `worker.py` | Serialized device owner, mode/connection state, idle pose polling, command execution and Qt signals |
 | `engine.py` | Experiment/rehearsal sequencing, cancellable waits, simulation adapters and run output |
 | `drivers.py` | Lazy Dobot/PalmSens adapters, queue/pose checks, SDK method mapping, units and cleanup |
+| `workspace_map.py` / `workspace_explorer.py` | Bounded XYZ grid plans, saved-map validation and native read-only reach explorer |
 | `robot_checks.py` | Sampled non-moving route checks and DobotLink alarm-byte decoding |
 | `camera.py` | Independent OpenCV capture worker and camera discovery |
 | `widgets.py` | Shared styling, controls, CV plot, camera preview and cap sketch |
@@ -86,3 +87,9 @@ Keep production hardware dependencies optional. `requirements.txt` supplies simu
 ## Repository workflow
 
 The primary repository is public [aalto-ema/electrobot](https://github.com/aalto-ema/electrobot), migrated from Aalto GitLab on 2026-10-12 with Git history preserved. `origin` points to GitHub; the migration checkout retains the former remote as `gitlab`. New GitHub clones normally have only `origin`. Checked changes are committed and pushed directly to `main`, as the user confirmed. The README has clone and existing-checkout migration commands. Local calibration, run data and untracked files are not part of the Git-history migration.
+
+## Workspace explorer
+
+The explorer submits `workspace_scan` with an ephemeral XYZ grid and fixed R to DeviceWorker. The worker calls `DobotRobot.controller_limited()` directly, independently of configured workspace bounds; the same primitive serves route preflight. Results distinguish controller acceptance, configured bounds at scan time, and unqueried samples. Expected limit rejections are map data rather than motion faults. Unsupported/malformed responses abort with unknown samples retained.
+
+`workspace_sample` emits start metadata (settings snapshot, UTC time, query spec), individual XYZ/R/accepted/inside-bounds points and completion. Scans require connected, homed Hardware, serialize with all other device commands and cancel between RPCs; cancelling a read-only scan does not stop/clear the queue or invalidate homing. No simulation reach is fabricated. JSON maps retain provenance and partial completion, CSV exports individual results. Loading maps changes no settings or device state; copying an accepted sample only fills manual target fields. The plot uses exact samples without interpolation, optionally intersecting all sampled Z heights at each XY. Current station overlays are XY projections, not validated station heights. Neither samples nor their intersection certify a continuous path or collision clearance.

@@ -188,3 +188,14 @@ git branch --set-upstream-to=origin/main main
 These commands assume `origin` still points to the old GitLab repository and `gitlab` is not already configured. New GitHub clones need no remote changes.
 
 Sources: [Dobot library API/source](https://github.com/mslopgk/dobotkit), [PalmSens Python SDK installation](https://dev.palmsens.com/python/latest/_attachments/installation/), [PalmSens CV](https://sdk.palmsens.com/python/latest/_attachments/reference/methods/cyclic_voltammetry/), [PalmSens instrument management](https://sdk.palmsens.com/python/latest/_attachments/reference/instrument_async/), [EmStat4S specifications](https://assets.palmsens.com/product/emstat4s/), [OpenCV VideoCapture](https://docs.opencv.org/4.5.5/d8/dfe/classcv_1_1VideoCapture.html).
+
+## Map robot reach before placing fixtures
+
+Open **Manual robot → Workspace explorer…** (also available in **Settings → Workspace**). In Hardware, connect and explicitly home the robot first. Scanning sends only controller pose-limit queries: it does not move, open or close the gripper, or teach coordinates.
+
+1. Start with one Z height (From = To), fixed R and a coarse XY step such as 25–50 mm. Narrow the area and step afterward. Each scan is limited to 5000 queries; duration depends on controller response time.
+2. To find positions with vertical travel, scan a Z range. For example, Z −40 to +60 covers a 100 mm span, but is a query example rather than a recommended motion. **All sampled Z heights** shows green only when every sampled height at that X/Y was accepted.
+3. Click an XY sample to inspect its exact coordinates and each Z result. Select an accepted Z row and **Copy selected pose to Manual target** if useful; this only fills the fields.
+4. Save JSON for later offline inspection or export CSV (XYZ in mm, R in degrees). Loaded maps are historical; their configured-bounds column refers to the settings snapshot at scan time. Current rack/cell/rinse markers are XY projections.
+
+Grey means unknown, including unsupported firmware or an interrupted query. Simulation does not invent a hardware reach map. Controller acceptance is provisional: it excludes neither obstacles nor an unqueried limit between samples, and depends on the controller/tool configuration and R. Use **Check planned route** and physical commissioning before handling electrodes. Firmware support and accuracy on the lab robot remain unverified.

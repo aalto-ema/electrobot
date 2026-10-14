@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 from types import SimpleNamespace
 sys.path.insert(0,str(Path(__file__).resolve().parent.parent))
-from PySide6.QtWidgets import QApplication,QMessageBox
+from PySide6.QtWidgets import QApplication,QMessageBox,QFileDialog
 from electrobot.app import Window,STYLE
 from electrobot.drivers import DobotRobot,PalmSensPotentiostat
 from test_drivers import FakeArm,FakeSDK
@@ -78,6 +78,50 @@ with tempfile.TemporaryDirectory() as d,patch.object(worker_module,'DobotRobot',
     w.submit('clear_alarms'); idle(); assert not w.device_state['homed']
     w.submit('home'); idle(); assert not w.robot_diagnostics['fault']
     w.submit('check_route'); idle(); assert 'passed' in w.robot_diagnostics['preflight']
+    # Controller map classifies Z limits without motion, grip or queue commands.
+    w.open_workspace_explorer(); explorer=w.workspace_explorer
+    spec=dict(x_min=190,x_max=210,x_step=10,y_min=0,y_max=0,y_step=10,
+              z_min=50,z_max=100,z_step=25)
+    for key,value in spec.items(): explorer.inputs[key].setValue(value)
+    arm.limited=lambda p:p['z']>70
+    calls=len(arm.calls); explorer.start_scan(); idle()
+    assert explorer.data['complete'] and len(explorer.data['points'])==9
+    assert sum(p[4] for p in explorer.data['points'])==3
+    assert all(isinstance(c,tuple) and c[0]=='rpc' and c[1]=='CheckPoseLimit' for c in arm.calls[calls:])
+    assert w.device_state['homed']
+    explorer.plot.choice=(200,0); explorer.refresh_selection()
+    assert explorer.plot.state(200,0) is False
+    explorer.table.setCurrentCell(0,0); app.processEvents()
+    assert explorer.copy_target.isEnabled()
+    explorer.copy_pose(); assert tuple(f.value() for f in w.target_fields)==(200,0,50,0)
+    explorer.grab().save('cad/ui-workspace-explorer.png')
+    explorer.resize(920,720); app.processEvents()
+    assert explorer.width()<=920 and explorer.height()<=720
+    explorer.grab().save('cad/ui-workspace-explorer-compact.png')
+    saved=Path(d)/'workspace.json'; csv_path=Path(d)/'workspace.csv'
+    with patch.object(QFileDialog,'getSaveFileName',return_value=(str(saved),'JSON')):
+        explorer.export_map(False)
+    with patch.object(QFileDialog,'getSaveFileName',return_value=(str(csv_path),'CSV')):
+        explorer.export_map(True)
+    assert len(csv_path.read_text().splitlines())==10
+    with patch.object(QFileDialog,'getOpenFileName',return_value=(str(saved),'JSON')):
+        explorer.load_map()
+    assert len(explorer.data['points'])==9 and explorer.data['complete']
+    assert 'Historical' in explorer.status.text()
+    arm.unsupported=True; explorer.start_scan(); idle()
+    assert not explorer.data['complete'] and not explorer.data['points']
+    assert explorer.plot.state(200,0) is None
+    assert warnings; warnings.clear(); arm.unsupported=False
+    # Cancelling read-only queries preserves homing and sends no stop/clear.
+    original=arm.limited
+    def cancel_after_query(params):
+        w.worker.cancel()
+        return original(params)
+    arm.limited=cancel_after_query; calls=len(arm.calls)
+    explorer.start_scan(); idle()
+    assert not explorer.data['complete'] and w.device_state['homed']
+    assert 'stop' not in arm.calls[calls:] and 'clear' not in arm.calls[calls:]
+    explorer.close(); arm.limited=lambda p:False
     w.fields['calibrated'].setChecked(True); w.fields['rack_x'].setValue(191); assert not w.fields['calibrated'].isChecked()
     w.submit('grip',True); idle(); w.disconnect_devices(); assert not w.busy and w.device_state['robot']
     w.close(); app.processEvents(); assert w.isVisible() and w.worker.isRunning()

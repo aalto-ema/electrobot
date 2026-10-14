@@ -22,6 +22,7 @@ class Window(QMainWindow):
     def __init__(self):
         super().__init__(); self.setWindowTitle('Electrobot · Electrochemistry Workbench')
         self.resize(1440,960); self.setMinimumSize(1120,760)
+        self.workspace_explorer=None; self.active_command=None
         self.s=Settings(); self.fields={}; self.busy=False; self.running_batch=False
         self.paused=False; self.camera=None; self.last_frame=None; self.output=None
         self._close_pending=False; self._shutdown_sent=False; self.current_pose=None; self.robot_diagnostics={}
@@ -69,6 +70,7 @@ class Window(QMainWindow):
         self.nav.currentRowChanged.connect(self.change_page); self.nav.setCurrentRow(0)
         self.worker=DeviceWorker(ROOT/'runs'); self.worker.state.connect(self.on_devices)
         self.worker.diagnostic.connect(self.on_diagnostic)
+        self.worker.workspace_sample.connect(self.on_workspace_sample)
         self.worker.pose.connect(self.on_pose); self.worker.event.connect(self.on_event)
         self.worker.point.connect(self.plot.add); self.worker.result.connect(self.on_result)
         self.worker.completed.connect(self.on_completed); self.worker.finished.connect(self.on_worker_finished); self.worker.start()
@@ -255,7 +257,7 @@ class Window(QMainWindow):
         actions=QHBoxLayout(); self.manual_buttons=[]; self.motion_buttons=[]
         for text,command in (('Read pose','pose'),('Home robot','home')):
             b=button(text,lambda checked=False,c=command:self.submit(c)); actions.addWidget(b); self.manual_buttons.append(b)
-        self.manual_stop=button('Stop robot',self.stop_run); self.manual_stop.setObjectName('danger'); actions.addWidget(self.manual_stop); actions.addStretch(); l.addLayout(actions)
+        self.manual_stop=button('Stop robot',self.stop_run); self.manual_stop.setObjectName('danger'); actions.addWidget(self.manual_stop); actions.addWidget(button('Workspace explorer…',self.open_workspace_explorer)); actions.addStretch(); l.addLayout(actions)
         self.pose_label=QLabel('X —    Y —    Z —    R —'); self.pose_label.setObjectName('metric'); l.addWidget(self.pose_label)
         self.manual_diagnostic=self.note('Robot checks: not yet run'); l.addWidget(self.manual_diagnostic)
         checks=QHBoxLayout()
@@ -342,6 +344,7 @@ class Window(QMainWindow):
         bounds.addWidget(self.settings_group('Rinse footprint (mm)', [('rinse_beaker_diameter','Rinse beaker diameter',10,250)]))
         bounds.addWidget(self.settings_group('Controller reachability and fault detection', [('controller_preflight','Check controller pose limits before movement'),('reachability_step','Route sample spacing (mm)',1,50),('motion_stall_timeout','No-progress timeout (s)',1,60)]))
         self.route_check=button('Check planned route · no movement',lambda:self.submit('check_route')); bounds.addWidget(self.route_check)
+        bounds.addWidget(button('Workspace explorer…',self.open_workspace_explorer))
         bounds.addWidget(self.note('Connected/homed Hardware robot required. Asks DobotLink CheckPoseLimit about XYZ/R at station heights, Travel Z and sampled straight transfers. This detects supported controller limits, not obstacles or full collision clearance. Unsupported firmware blocks this check; disabling it explicitly leaves configured bounds, alarm monitoring and the progress watchdog. A passed check applies only to that settings snapshot.'))
         bounds.addStretch()
         cell=self.settings_tab('Cell & carrier'); row=QHBoxLayout()
@@ -382,10 +385,31 @@ class Window(QMainWindow):
 
     def submit(self,command,payload=None):
         if self.busy or self._close_pending: return
-        try: s=self.read_settings(validate=command!='rehearsal_pose')
+        try: s=self.read_settings(validate=command not in ('rehearsal_pose','workspace_scan'))
         except Exception as exc: QMessageBox.warning(self,'Check settings',str(exc)); return
-        self.busy=True; self.refresh_controls(); self.statusBar().showMessage(command.replace('_',' ').capitalize()+'…')
+        self.active_command=command; self.busy=True; self.refresh_controls(); self.statusBar().showMessage(command.replace('_',' ').capitalize()+'…')
         self.worker.submit(command,s,payload)
+    def open_workspace_explorer(self):
+        from .workspace_explorer import WorkspaceExplorer
+        settings=self.read_settings(validate=False)
+        if self.workspace_explorer is None:
+            self.workspace_explorer=WorkspaceExplorer(self,settings)
+            self.workspace_explorer.scan_requested.connect(self.start_workspace_scan)
+            self.workspace_explorer.cancel_requested.connect(self.cancel_workspace_scan)
+            self.workspace_explorer.target_selected.connect(self.copy_workspace_target)
+        self.workspace_explorer.settings=settings
+        self.refresh_controls(); self.workspace_explorer.show(); self.workspace_explorer.raise_()
+    def start_workspace_scan(self,spec):
+        self.submit('workspace_scan',spec)
+        if self.active_command!='workspace_scan':
+            self.workspace_explorer.scanning=False; self.workspace_explorer.update_buttons()
+    def cancel_workspace_scan(self):
+        if self.busy and self.active_command=='workspace_scan': self.worker.cancel()
+    def on_workspace_sample(self,event):
+        if self.workspace_explorer: self.workspace_explorer.handle_event(event)
+    def copy_workspace_target(self,pose):
+        for field,value in zip(self.target_fields,pose): field.setValue(value)
+        self.statusBar().showMessage('Workspace pose copied to Manual robot target. No movement commanded.')
     def disconnect_devices(self):
         if self.mode.currentData()=='hardware' and self.device_state.get('holding'):
             self.statusBar().showMessage('Secure the electrode and open the gripper before disconnecting; disconnect turns off its pump.')
@@ -464,6 +488,7 @@ class Window(QMainWindow):
         self.placement_export.setEnabled(idle); self.rack_export.setEnabled(idle)
         self.lattice_preset.setEnabled(idle)
         can_check=idle and hardware and d.get('robot',False) and d.get('homed',False)
+        if self.workspace_explorer: self.workspace_explorer.set_available(can_check)
         self.route_check.setEnabled(can_check); self.manual_route_check.setEnabled(can_check)
         self.alarm_clear.setEnabled(idle and hardware and d.get('robot',False))
         lattice=self.fields['rack_design'].currentData()=='lattice'
@@ -510,7 +535,10 @@ class Window(QMainWindow):
         self.output=Path(folder) if folder else None; self.state.setText(status.capitalize()); self.statusBar().showMessage(f'Run {status} · {folder}')
     def on_completed(self,command,ok,message):
         if command=='shutdown': self.statusBar().showMessage(message); return
-        self.busy=False
+        self.busy=False; self.active_command=None
+        if command=='workspace_scan' and self.workspace_explorer:
+            self.workspace_explorer.scanning=False; self.workspace_explorer.update_buttons()
+            if not ok: self.workspace_explorer.status.setText(message+' · unqueried points remain unknown')
         if command in ('run','rehearse'): self.running_batch=False
         if not ok:
             self.log.appendPlainText(message); self.statusBar().showMessage(message)

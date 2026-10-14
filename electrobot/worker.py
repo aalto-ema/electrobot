@@ -1,5 +1,7 @@
 """One serialized device owner; GUI only submits commands or sets cancel events."""
 import queue
+from dataclasses import asdict
+from datetime import datetime,timezone
 from pathlib import Path
 from PySide6.QtCore import QThread,Signal
 from .engine import Control,Cancelled,Experiment,SimRobot,SimPotentiostat
@@ -9,6 +11,7 @@ class DeviceWorker(QThread):
     state=Signal(dict); pose=Signal(dict); event=Signal(dict); diagnostic=Signal(dict)
     point=Signal(int,float,float,float); result=Signal(str,str)
     completed=Signal(str,bool,str)
+    workspace_sample=Signal(dict)
     def __init__(self,output):
         super().__init__(); self.output=Path(output); self.commands=queue.Queue()
         self.control=Control(); self.robot=None; self.pot=None
@@ -63,7 +66,7 @@ class DeviceWorker(QThread):
                 self.publish(); return
             ok=True; message=''
             try:
-                if command!='rehearsal_pose': s.validate()
+                if command not in ('rehearsal_pose','workspace_scan'): s.validate()
                 self.setup(s,control); control.check()
                 if command=='configure':
                     if self.robot_connected: self.robot.pose()
@@ -96,12 +99,32 @@ class DeviceWorker(QThread):
                         pose=self.robot.pose()
                         self.robot.preflight_route(s.planned_route(tuple(pose[k] for k in ('x','y','z','r'))))
                     elif command=='clear_alarms': self.robot.clear_alarms()
+                    elif command=='workspace_scan':
+                        if self.mode!='hardware' or not self.robot.homed:
+                            raise ValueError('Workspace mapping needs a connected, homed Hardware robot')
+                        from .workspace_map import scan_points
+                        points=scan_points(payload)
+                        self.workspace_sample.emit({'kind':'start','metadata':{'format':'electrobot-controller-workspace-v1',
+                            'source':'DobotLink.CheckPoseLimit','started_utc':datetime.now(timezone.utc).isoformat(),
+                            'spec':payload,'settings_snapshot':asdict(s),'complete':False},'total':len(points)})
+                        try:
+                            for i,point in enumerate(points):
+                                control.check()
+                                # Rejections are map data, not motion faults. An unsupported
+                                # query aborts; it must not paint every sample as unreachable.
+                                accepted=not self.robot.controller_limited(point)
+                                try: s.validate_pose(point); inside=True
+                                except ValueError: inside=False
+                                self.workspace_sample.emit({'kind':'point','point':[*point,accepted,inside],'done':i+1,'total':len(points)})
+                        except Exception:
+                            self.workspace_sample.emit({'kind':'finish','complete':False}); raise
+                        self.workspace_sample.emit({'kind':'finish','complete':True})
                     elif command=='stop': self.robot.stop()
                     else: raise ValueError(f'Unknown command: {command}')
                     if command!='stop': self.robot.pose()
             except Cancelled:
                 ok=False; message='Stopped'
-                if self.robot_connected:
+                if self.robot_connected and command!='workspace_scan':
                     try: self.robot.stop()
                     except Exception as exc: message+=f'; stop failed: {exc}'
             except Exception as exc:

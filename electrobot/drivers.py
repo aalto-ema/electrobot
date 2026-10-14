@@ -59,10 +59,7 @@ class DobotRobot:
         key=tuple(round(v,6) for v in target)
         if key in self._checked: return
         try:
-            response=response_params(self.arm.cmds._call('CheckPoseLimit',call_timeout=self.s.robot_timeout,
-                isJoint=False,**dict(zip(('x','y','z','r'),target))))
-            limited=response.get('isLimited') if isinstance(response,dict) else None
-            if type(limited) is not bool: raise ValueError('Missing boolean isLimited in controller response')
+            limited=self.controller_limited(target)
         except Cancelled: raise
         except Exception as exc:
             self.diagnostic(preflight='Unavailable: '+str(exc))
@@ -71,6 +68,15 @@ class DobotRobot:
             self.diagnostic(rejected_pose=dict(zip(('x','y','z','r'),target)),preflight='Rejected: '+label)
             raise self._fault('Controller rejected '+label+f' at sampled XYZ/R {tuple(round(v,2) for v in target)} as outside its pose limits. This check commanded no movement; check travel Z and station coordinates.')
         self._checked.add(key)
+    def controller_limited(self,target):
+        """Query only; deliberately independent of the user's workspace bounds."""
+        self.control.check()
+        if len(target)!=4 or not all(math.isfinite(v) for v in target): raise ValueError('Invalid query pose')
+        response=response_params(self.arm.cmds._call('CheckPoseLimit',call_timeout=self.s.robot_timeout,
+            isJoint=False,**dict(zip(('x','y','z','r'),target))))
+        limited=response.get('isLimited') if isinstance(response,dict) else None
+        if type(limited) is not bool: raise ValueError('Missing boolean isLimited in controller response')
+        return limited
     def preflight_route(self,route):
         self._checked.clear(); self._check_control=self.control
         self.pose()

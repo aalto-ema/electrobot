@@ -22,6 +22,10 @@ GUI actions submit a settings snapshot and payload to `DeviceWorker`. Signals pu
 
 Normal experiments release the carrier in the cell before measurement, retrieve it afterward, dip it in rinse water, then return it to its original slot. Rehearsal follows the handling route and skips measurement. A future gripper-mounted electrical contact may require a different hold-during-measurement workflow; that workflow is not implemented.
 
+### Current speed mapping
+
+The hardware adapter calls `dobotkit 0.2.0`'s `set_speed(velocity, acceleration)`. Inspection of the installed SDK on 2026-10-14 showed it writes the same values to both `SetPTPCommonParams` (velocity/acceleration ratios) and `SetPTPCoordinateParams` (XYZ/R velocity and acceleration). The app's 0–100 settings are therefore not a pure percentage control or a calibrated mm/s interface; low values may compound across both parameter sets. Actual controller interpretation and achieved speeds have not been measured on the lab arm. The compact rehearsal preset sets both values to 10; edit Motion afterward when testing other settings. Simulation instead uses `simulation_speed`; changing hardware velocity does not accelerate simulated movement. Short hardware moves also incur command/feedback overhead and configured handling waits. Separating ratio and Cartesian limits is a possible future change, not current behavior.
+
 ## Settings and coordinate contract
 
 `Settings` fields persist as JSON. New fields need defaults to load older profiles. The application reads/writes fields generically; construction and enum choices still need explicit UI widgets. Profiles preserve the selected session mode; a new session starts in Simulation.

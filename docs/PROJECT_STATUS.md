@@ -48,6 +48,7 @@ The `cad/gripper` probe bracket assumes a rigid mounting neck that has not been 
 | Automatic WE connection | Choose holder conductor/pad, spring contact and cable route; measure continuity and retention |
 | Electrical-contact workflow | Decide fixed cell contact versus gripper contact; a gripper contact likely needs hold-during-CV sequencing |
 | Hardware commissioning | Verify connection, homing, release/close, measured poses, dummy route, SDK acquisition and stop behavior |
+| Speed controls | The user reported slow rehearsal on 2026-10-14. Installed `dobotkit 0.2.0` applies the same settings to PTP ratios and Cartesian limits, potentially compounding low values; compact preset uses 10/10. Confirm controller units/achieved speeds and consider separating those controls. No measured speed or new motion behavior is established. |
 | Recovery and detection | Define detectable failure states before introducing camera-based retries or automatic motion recovery |
 | Future electrode formats | Define flag-electrode holders/inserts and clearance envelopes; current printable holder is for rods |
 

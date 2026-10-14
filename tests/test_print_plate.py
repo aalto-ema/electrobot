@@ -13,6 +13,7 @@ class PrintPlateTests(unittest.TestCase):
         source=json.loads((folder/'parts/rack_manifest.json').read_text())
         self.assertTrue(plate.is_watertight and plate.is_volume)
         self.assertEqual(connected_solids(plate),9)
+        self.assertLessEqual(plate.bounds[1,2],manifest['nominal_build_height_mm'])
         self.assertEqual(sorted(p['label'] for p in manifest['parts']),['A','B','F1','F2','F3','H1','H2','H3','R'])
         self.assertEqual(source['holder_quantity'],3); self.assertEqual(source['foot_quantity'],3)
         self.assertEqual(len(source['slot_robot_xyz']),3)

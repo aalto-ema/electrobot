@@ -10,14 +10,17 @@ Open **`three-electrode-rack-kit.stl`** in your slicer, keep its relative arrang
 | A | 1 | Nominal holder/foot fit coupon |
 | B | 1 | Slightly looser holder/foot fit coupon |
 
-The occupied footprint is approximately **126.5 × 132.1 mm**, maximum height **94.5 mm**. The layout is centred on an assumed 220 × 220 mm bed, with at least 8 mm between part bounding boxes. The three tall feet are grouped into a 72 × 48 mm region; after the short components finish, the remaining printing stays around this group. A search of shelf orders/rotations favours small area and a compact shape. This reduces geometric separation; actual travel and print order depend on the slicer and have not been simulated as printer toolpaths.
+The occupied footprint is approximately **126.5 × 132.1 mm**, maximum height **94.5 mm**. The user specified a **Creality Ender-3 V2 with Cura**. The layout is centred on its nominal 220 × 220 mm bed, with at least 8 mm between part bounding boxes, and fits its nominal 250 mm build height. The three tall feet are grouped into a 72 × 48 mm region; after the short components finish, the remaining printing stays around this group. A search of shelf orders/rotations favours small area and a compact shape. This reduces geometric separation; actual travel and print order depend on the slicer and have not been simulated as printer toolpaths.
 
 ## Slicing
 
+- In Cura, use your Ender-3 V2 printer configuration and actual nozzle/material profile. Open the combined STL, keep scale at 100% and retain its relative arrangement. Search for **Print Sequence** in Custom settings and select **All at Once**. Slice and inspect Preview before saving G-code for your printer.
 - Use normal **layer-by-layer / all objects together** printing for this prepared layout. The STL contains no temperature, speed, material, support or printer-specific profile and is not G-code.
 - Keep the top and coupons flat, feet upright on their bases, and holders flange-down as supplied. Do not auto-arrange the individual shells if you want to retain the compact layout. If your slicer asks whether to split the file, preserve the part coordinates.
 - Inspect the slicer preview, especially adhesion of the tall 6 mm foot columns, small underside socket bridges, holder contact recess and all gaps. A foot brim may help; choose it in the slicer and check its footprint rather than assuming the geometry includes one.
-- Printing one complete part before the next is a different mode. It requires the actual printhead/gantry collision clearances and object order. This tightly packed file is **not validated for complete-object sequential printing**. Provide the printer model and slicer to prepare that separately.
+- Cura's **One at a Time** completes one object before starting the next. That mode requires the actual printhead/gantry clearances and object order, beyond checking the build volume. This tightly packed file is **not validated for complete-object sequential printing**; use **All at Once**. The 94.5 mm feet especially require clearance validation before considering sequential printing. Do not raise Cura's gantry-clearance settings simply to bypass a collision restriction.
+
+References: [Creality Ender-3 V2 dimensions](https://www.creality.com/blog/ender-3-v2-vs-cr-6-se-comparison-what-are-the-differences-and-similarities); [UltiMaker's explanation of Print Sequence and gantry-height limits](https://support.ultimaker.com/s/article/1667337612195) (the general print-sequence note, not the material-specific TPU recommendations).
 
 ## Provisional dimensions and assembly
 

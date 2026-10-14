@@ -23,7 +23,7 @@ Last reviewed: 2026-10-14. Update this document when capabilities or physical ev
 - Persistent settings, inline geometric checks and pinned calibration/workspace diagrams.
 - PDF placement templates, legacy socket rack and modular holder-supported rack exports.
 - Modular rack: adjustable holder and interface dimensions, separate tops/feet/holders, fit coupon, bed-fit checks, quantities, geometry IDs and assembly origins/rotations.
-- Compact three-electrode print kit in `cad/three-electrode-print`: one STL with a three-seat radial top, three clustered feet, three holders and two fit coupons. Geometry is arranged for layer-by-layer printing; no printer-specific G-code or complete-object sequential clearances have been validated. Printer model/slicer are not yet specified.
+- Compact three-electrode print kit in `cad/three-electrode-print`: one STL with a three-seat radial top, three clustered feet, three holders and two fit coupons. The user specified a Creality Ender-3 V2 and Cura on 2026-10-14. The kit fits the nominal 220 × 220 × 250 mm volume and is arranged for Cura All at Once (layer-by-layer) printing; no printer-specific G-code or complete-object sequential clearances have been validated.
 - Unit tests, offscreen UI checks and a mocked hardware UI integration check. No cloud service is required to run the app.
 
 ## Physical evidence and assumptions

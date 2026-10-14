@@ -1,5 +1,8 @@
 {
   "units": "mm",
+  "target_printer": "Creality Ender-3 V2",
+  "target_slicer": "UltiMaker Cura",
+  "nominal_build_height_mm": 250,
   "bed_mm": [
     220,
     220

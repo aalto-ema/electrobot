@@ -98,6 +98,7 @@ def generate(folder,bed_width=220,bed_depth=220,gap=8,margin=10):
     # Reload to validate the actual file, not just in-memory sources.
     loaded=tm.load_mesh(folder/'three-electrode-rack-kit.stl')
     assert loaded.is_watertight and loaded.is_volume and connected_solids(loaded)==9
+    assert loaded.bounds[1,2]<=250  # Nominal Ender-3 V2 build height.
     for i,a in enumerate(records):
         bounds=np.array(a['bounds_mm']); assert abs(bounds[0,2])<1e-5
         assert bounds[0,0]>=margin-1e-4 and bounds[1,0]<=bed_width-margin+1e-4
@@ -107,7 +108,8 @@ def generate(folder,bed_width=220,bed_depth=220,gap=8,margin=10):
             dx=max(0,bounds[0,0]-other[1,0],other[0,0]-bounds[1,0])
             dy=max(0,bounds[0,1]-other[1,1],other[0,1]-bounds[1,1])
             assert math.hypot(dx,dy)>=gap-1e-3,(a['label'],b['label'],dx,dy)
-    meta={'units':'mm','bed_mm':[bed_width,bed_depth],'parts':records,'closed_solids':9,
+    meta={'units':'mm','target_printer':'Creality Ender-3 V2','target_slicer':'UltiMaker Cura',
+          'nominal_build_height_mm':250,'bed_mm':[bed_width,bed_depth],'parts':records,'closed_solids':9,
           'bounds_mm':loaded.bounds.tolist(),'minimum_part_gap_mm':gap,'bed_edge_margin_min_mm':margin,
           'settings':asdict(s),'coupon_A':{'holder_recess_diameter':s.holder_diameter+s.rack_holder_clearance,
                                        'peg_socket_diameter':s.rack_peg_diameter+s.rack_peg_clearance},

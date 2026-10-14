@@ -4,7 +4,7 @@ Source repository: [aalto-ema/electrobot on GitHub](https://github.com/aalto-ema
 
 Licensed under the [MIT License](LICENSE).
 
-PySide6 desktop workbench for a Dobot Magician Lite + MagicBox and PalmSens EmStat4S LR electrochemistry platform. Choose **Simulation** for development on macOS or **Hardware** for lab commissioning. The real drivers are implemented against `dobotkit 0.2.0` and `pypalmsens 2.2.0`; they have been tested with device doubles, not yet on the physical lab setup.
+PySide6 desktop workbench for a Dobot Magician Lite + MagicBox and PalmSens EmStat4S LR electrochemistry platform. Choose **Simulation** for development on macOS or **Hardware** for lab commissioning. The real drivers target `dobotkit 0.2.0` and `pypalmsens 2.2.0`. Automated checks use device doubles; robot rehearsal has begun in the lab, with reach-limit stopping under investigation. Full robot/potentiostat commissioning is incomplete.
 
 ![Experiment workspace](cad/ui-run.png)
 
@@ -68,6 +68,18 @@ Use **Manual robot** to read the reported pose, home, jog XYZ/R, move to an abso
 Hardware connection does not home, move, or actuate the gripper. Homing is explicit and required before hardware motion. Moves use `MOVL_XYZ`, wait for queued-command completion, and then verify reported XYZ/R against the configured tolerance. Timeouts, cancellation and pose mismatch stop and clear the queue. Rehome before subsequent hardware movement after a stop.
 
 **Teach station** copies the reported pose into rack slot 1, cell seating, rinse dipping, or travel height settings. Teaching and changes to station/workspace coordinates clear the calibration flag. Save the configuration after verifying the route. Gripper state is the *commanded* state, not confirmation of a successful pickup.
+
+### Reach limits and fault feedback
+
+The arm's reachable XY area depends on Z and its joint configuration. A point inside the entered XYZ bounds and radial band is not necessarily reachable. Before a hardware experiment/rehearsal, Electrobot now asks the controller's **CheckPoseLimit** command about the planned handling route without moving: the initial lift, rack/cell/rinse approach heights, transfers at Travel Z, and intermediate straight-line samples. Manual moves receive the same sampled check. The default spatial spacing is 10 mm, with extra angular and closest-radius samples; this is not continuous-path or obstacle/collision validation.
+
+To test your configuration separately, connect and home, then use **Manual robot → Check planned route · no motion**, or **Settings → Workspace → Check planned route · no movement**. The route check is cancellable between controller calls and can take time for many electrodes. Changing settings makes the old result stale; hardware runs always preflight again. If the firmware cannot answer this command, the UI reports it and blocks enabled preflight. **Settings → Workspace → Controller reachability and fault detection** allows explicit disabling of the controller check, adjustment of sample spacing and adjustment of the no-progress timeout; disabling it reduces protection and leaves the entered bounds plus runtime diagnostics. No software IK model or theoretical reach envelope is silently substituted.
+
+During movement, the worker polls controller alarms and reported pose. If the robot reports an alarm or an unfinished move makes no reported progress for **5 s** by default, the software stops/clears its queue, preserves the gripper command, and requires homing before further motion. A stall is labelled a possible limit/obstruction/controller problem, not a confirmed mechanical diagnosis. Missing alarm feedback is displayed as unavailable; the progress watchdog and overall motion timeout remain. Software response still depends on RPC latency and is not an emergency-stop mechanism.
+
+Both **Experiment** and **Manual robot** retain the requested target and actual reported XYZ, plus a visible fault banner. **Robot diagnostic details… / Diagnostic details…** opens the full report, including R/joint angles when reported, numeric alarm IDs, raw alarm response, rejected preflight sample and a **Copy diagnostic report** button. Fault messages also appear in Activity; hardware runs save `robot-diagnostics.json` alongside events and summary. Manual faults without a run folder can be copied from the dialog.
+
+For recovery, inspect the robot and route first. **Manual robot → Clear controller alarms** explicitly stops/clears the queue and sends the alarm-clear command, without moving or releasing the gripper. It does not rehome or resume. Then home using the verified homing path and recheck the corrected route. A rejected non-moving check can be corrected and checked again without automatic recovery motion. The new controller queries/alarm handling are tested with mocks; support and interpretation must still be checked against the lab firmware.
 
 ## Settings and lab commissioning
 

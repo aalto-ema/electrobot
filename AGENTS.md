@@ -25,7 +25,7 @@
 - Preserve stop/cancellation, queue completion and pose verification, cell-off cleanup, held-electrode disconnect guards, and partial-data retention. Do not add automatic recovery movement without defining the recovery behavior with the user.
 - A rehearsal must never measure or create electrochemistry CSV data. It may operate an explicitly connected potentiostat only to turn its cell off.
 - Do not use physical hardware as a software test. Hardware operation needs authorization for the operation; continue relevant work within an already authorized commissioning session without repeated permission requests.
-- Workspace checks validate endpoints, not obstacles, joint limits or whole-path clearance. Never describe them as collision detection or a hardware safety certification.
+- Configured workspace bounds are distinct from controller reachability checks. The latter query supported firmware limits at sampled path poses; neither establishes obstacle, whole-path or joint-limit clearance between samples. Never describe them as collision detection or a hardware safety certification.
 
 ## Settings, coordinates and data
 

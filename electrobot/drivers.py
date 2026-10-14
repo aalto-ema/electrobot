@@ -4,6 +4,7 @@ import math
 import time
 from pathlib import Path
 from .engine import Cancelled
+from .robot_checks import segment_samples,response_params,alarm_codes,alarm_description
 
 CURRENT_RANGES={.001:'1nA',.01:'10nA',.1:'100nA',1:'1uA',10:'10uA',100:'100uA',1000:'1mA',10000:'10mA'}
 
@@ -11,6 +12,76 @@ class DobotRobot:
     def __init__(self,s,control,pose_callback=lambda p:None,arm_factory=None):
         self.s=s; self.control=control; self.pose_callback=pose_callback
         self.arm_factory=arm_factory; self.arm=None; self.holding=False; self.homed=False; self.gripper_state='unknown'
+        self.diagnostic_callback=lambda d:None
+        self.diagnostics={'target':None,'actual':None,'fault':'','alarms':[],'alarm_monitor':'not checked','preflight':'not checked'}
+        self._checked=set(); self._check_control=None
+    def diagnostic(self,**values):
+        self.diagnostics.update(values); self.diagnostic_callback(dict(self.diagnostics))
+    def _fault(self,reason):
+        target=self.diagnostics['target']; actual=self.diagnostics['actual']
+        def fmt(p): return ', '.join(f'{k.upper()}={p[k]:.2f}' for k in ('x','y','z','r')) if p else 'unavailable'
+        message=f'{reason}\nRequested: {fmt(target)}\nReported: {fmt(actual)}'
+        self.diagnostic(fault=message); return RuntimeError(message)
+    def read_alarms(self):
+        raw=None
+        try:
+            raw=self.arm.cmds.get_alarms_state(); codes=alarm_codes(raw)
+        except Exception as exc:
+            self.diagnostic(alarm_raw=raw,alarm_monitor='unavailable: '+str(exc)); return None
+        self.diagnostic(alarms=codes,alarm_raw=raw,alarm_monitor='available')
+        return codes
+    def check_alarms(self):
+        codes=self.read_alarms()
+        if codes:
+            raise self._fault('Controller alarm: '+', '.join(f'{c} (0x{c:02X}: {alarm_description(c)})' for c in codes)+'. Stop; inspect the robot, clear alarms explicitly, then home before motion.')
+    def poll_health(self):
+        self.pose()
+        try: self.check_alarms()
+        except RuntimeError:
+            if self.homed: self.stop()
+    def clear_alarms(self):
+        self.control.check()
+        self.stop()
+        self.arm.cmds._call('ClearAllAlarmsState',call_timeout=self.s.robot_timeout)
+        self.homed=False; self._checked.clear()
+        self.check_alarms()
+        self.diagnostic(fault=('Alarm clear command sent; feedback unavailable.' if self.diagnostics['alarm_monitor']!='available' else 'Alarms cleared explicitly.')+' Inspect the route and home before motion.')
+    def check_pose(self,target,label):
+        self.control.check()
+        try: self.s.validate_pose(target)
+        except ValueError as exc:
+            self.diagnostic(rejected_pose=dict(zip(('x','y','z','r'),target)),preflight='Rejected by configured bounds: '+label)
+            raise ValueError(str(self._fault('Configured workspace rejected '+label+': '+str(exc)))) from exc
+        if not self.s.controller_preflight:
+            self.diagnostic(preflight='Controller reachability disabled; configured bounds only'); return
+        if self._check_control is not self.control:
+            self._checked.clear(); self._check_control=self.control
+        key=tuple(round(v,6) for v in target)
+        if key in self._checked: return
+        try:
+            response=response_params(self.arm.cmds._call('CheckPoseLimit',call_timeout=self.s.robot_timeout,
+                isJoint=False,**dict(zip(('x','y','z','r'),target))))
+            limited=response.get('isLimited') if isinstance(response,dict) else None
+            if type(limited) is not bool: raise ValueError('Missing boolean isLimited in controller response')
+        except Cancelled: raise
+        except Exception as exc:
+            self.diagnostic(preflight='Unavailable: '+str(exc))
+            raise self._fault('Controller reachability query unavailable: '+str(exc)+'. No movement commanded by this check. If this firmware does not support CheckPoseLimit, the check can be explicitly disabled in Workspace; this reduces protection.') from exc
+        if limited:
+            self.diagnostic(rejected_pose=dict(zip(('x','y','z','r'),target)),preflight='Rejected: '+label)
+            raise self._fault('Controller rejected '+label+f' at sampled XYZ/R {tuple(round(v,2) for v in target)} as outside its pose limits. This check commanded no movement; check travel Z and station coordinates.')
+        self._checked.add(key)
+    def preflight_route(self,route):
+        self._checked.clear(); self._check_control=self.control
+        self.pose()
+        self.diagnostic(rejected_pose=None)
+        self.check_alarms()
+        previous=route[0][1]
+        for i,(label,target) in enumerate(route):
+            self.diagnostic(preflight=f'Checking {i+1}/{len(route)}: {label}',target=dict(zip(('x','y','z','r'),target)))
+            for sample in segment_samples(previous,target,self.s.reachability_step): self.check_pose(sample,label)
+            previous=target
+        self.diagnostic(fault='',preflight=('Controller sampled route passed; not a collision check' if self.s.controller_preflight else 'Configured bounds passed; controller check disabled'))
     def connect(self):
         if self.arm is not None: return
         try:
@@ -20,7 +91,7 @@ class DobotRobot:
             self.arm=self.arm_factory(port=self.s.robot_port,host=self.s.robot_host,
                 ws_port=self.s.robot_ws_port,timeout=self.s.robot_timeout,auto_connect=False)
             self.arm.connect(); self.arm.set_speed(self.s.robot_velocity,self.s.robot_acceleration)
-            self.pose()
+            self.poll_health()
         except Exception:
             if self.arm is not None:
                 try: self.arm.disconnect()
@@ -31,14 +102,26 @@ class DobotRobot:
         pose=self.arm.get_pose()
         if not all(math.isfinite(float(pose[k])) for k in ('x','y','z','r')):
             raise RuntimeError('Robot returned an invalid pose')
-        self.pose_callback(pose); return pose
+        self.diagnostic(actual=dict(pose)); self.pose_callback(pose); return pose
     def _wait_index(self,index,timeout,target=None):
         if not isinstance(index,int): raise RuntimeError('Dobot did not return a queued command index')
         deadline=time.monotonic()+timeout; stable=0; last_error='Queue has not completed'
+        previous=None; last_progress=time.monotonic(); alarm_read=0
         try:
             while time.monotonic()<deadline:
                 self.control.check()
                 pose=self.pose()  # Publish measured feedback while the queue is moving.
+                now=time.monotonic()
+                if now-alarm_read>=.25:
+                    self.check_alarms(); alarm_read=now
+                if previous is None or math.dist([pose[k] for k in ('x','y','z')],[previous[k] for k in ('x','y','z')])>=.2 or abs((pose['r']-previous['r']+180)%360-180)>=.2:
+                    previous=dict(pose); last_progress=now
+                if target is not None:
+                    xyz_error=math.dist([float(pose[k]) for k in ('x','y','z')],target[:3])
+                    rotation_error=abs((float(pose['r'])-target[3]+180)%360-180)
+                    if xyz_error<=self.s.position_tolerance and rotation_error<=self.s.rotation_tolerance: last_progress=now
+                    elif now-last_progress>=self.s.motion_stall_timeout:
+                        raise self._fault(f'No reported motion progress for {self.s.motion_stall_timeout:g} s. Possible reach/joint limit, obstruction or controller fault; cause is not confirmed. Stop and inspect, then home before motion.')
                 if self.arm.cmds.current_index()>=index:
                     reached=True
                     if target is not None:
@@ -50,17 +133,27 @@ class DobotRobot:
                     if stable>=2: return
                 else: stable=0
                 self.control.wait(.1)
-            raise TimeoutError(f'Robot command did not settle within its deadline. {last_error}')
-        except Exception:
-            self.stop(); raise
+            raise TimeoutError(str(self._fault(f'Motion timeout after {timeout:g} s. {last_error}. Inspect and home before motion.')))
+        except Exception as exc:
+            if not isinstance(exc,Cancelled) and not self.diagnostics['fault']: self._fault(str(exc))
+            try: self.stop()
+            except Exception as cleanup: self.diagnostic(fault=self.diagnostics['fault']+'\nRobot stop failed: '+str(cleanup))
+            raise
     def home(self):
-        self.control.check(); self.arm.cmds.queue_start()
+        self.control.check(); self.check_alarms(); self.arm.cmds.queue_start()
+        self.diagnostic(target=dict(zip(('x','y','z','r'),(200.,0.,0.,0.))),rejected_pose=None)
         self._wait_index(self.arm.home(wait=False),self.s.home_timeout,(200.0,0.0,0.0,0.0))
-        self.homed=True
+        self.homed=True; self._checked.clear(); self.diagnostic(fault='',preflight='Not checked after homing')
     def move(self,pose):
         if not self.homed: raise RuntimeError('Home the robot in Manual robot before moving')
         target=tuple(pose) if len(pose)==4 else (*pose,self.s.tool_r)
-        self.s.validate_pose(target); self.control.check()
+        self.diagnostic(target=dict(zip(('x','y','z','r'),target)),rejected_pose=None)
+        self.control.check()
+        try: self.s.validate_pose(target)
+        except ValueError as exc: raise ValueError(str(self._fault('Configured workspace rejected target: '+str(exc)))) from exc
+        self.check_alarms()
+        current=self.pose()
+        for sample in segment_samples(tuple(current[k] for k in ('x','y','z','r')),target,self.s.reachability_step): self.check_pose(sample,'requested move')
         from dobotkit import PTPMode
         self.arm.set_speed(self.s.robot_velocity,self.s.robot_acceleration)
         index=self.arm.move_to(*target,mode=PTPMode.MOVL_XYZ,wait=False)

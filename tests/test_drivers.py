@@ -14,15 +14,25 @@ class FakeArm:
     def __init__(self,**kwargs):
         self.kwargs=kwargs; self.calls=[]; self.current={'x':200.,'y':0.,'z':0.,'r':0.}
         self.index=0; self.pending=False; self.mismatch=False
+        self.alarms=[0]*16; self.limited=lambda p:False; self.unsupported=False
         self.cmds=SimpleNamespace(queue_start=lambda:self.calls.append('start'),
             queue_stop=lambda:self.calls.append('stop'),queue_clear=lambda:self.calls.append('clear'),
-            current_index=lambda:0 if self.pending else self.index)
+            current_index=lambda:0 if self.pending else self.index,
+            get_alarms_state=lambda:{'state':self.alarms},_call=self.rpc)
         self.effector=SimpleNamespace(grip=lambda on,enable,queued:self.calls.append(('grip',on,enable,queued)))
     def connect(self): self.calls.append('connect')
+    def rpc(self,name,**params):
+        self.calls.append(('rpc',name,params))
+        if name=='CheckPoseLimit':
+            if self.unsupported: raise RuntimeError('Unsupported command')
+            return {'isLimited':self.limited(params)}
+        if name=='ClearAllAlarmsState': self.alarms=[0]*16; return {}
+        raise RuntimeError('Unexpected RPC '+name)
     def disconnect(self): self.calls.append('disconnect')
     def set_speed(self,*args): self.calls.append(('speed',args))
     def get_pose(self): return dict(self.current)
-    def home(self,wait): self.calls.append(('home',wait)); self.index+=1; return self.index
+    def home(self,wait):
+        self.calls.append(('home',wait)); self.current={'x':200.,'y':0.,'z':0.,'r':0.}; self.index+=1; return self.index
     def move_to(self,*pose,**kwargs):
         self.calls.append(('move',pose,kwargs)); self.index+=1
         if not self.mismatch: self.current=dict(zip(('x','y','z','r'),pose))
@@ -84,6 +94,70 @@ class DriverTests(unittest.TestCase):
         with self.assertRaises(ValueError): r.move((999,0,0,0))
         self.assertFalse(any(isinstance(c,tuple) and c[0]=='move' for c in r.arm.calls))
         r.disconnect()
+
+    def test_controller_rejects_height_before_any_motion(self):
+        r=self.robot(safe_z=100); r.home(); r.arm.current['z']=68.8
+        r.arm.limited=lambda p:p['z']>70
+        start=tuple(r.arm.current[k] for k in ('x','y','z','r'))
+        with self.assertRaisesRegex(RuntimeError,'Controller rejected'):
+            r.preflight_route(r.s.planned_route(start))
+        self.assertFalse(any(isinstance(c,tuple) and c[0]=='move' for c in r.arm.calls))
+        self.assertEqual(r.diagnostics['target']['z'],100)
+        self.assertEqual(r.diagnostics['actual']['z'],68.8)
+        self.assertGreater(r.diagnostics['rejected_pose']['z'],70)
+        r.disconnect()
+
+    def test_reachability_checks_transfer_interior_and_unsupported_firmware(self):
+        r=self.robot(); r.home()
+        r.arm.limited=lambda p:205<p['x']<215
+        with self.assertRaisesRegex(RuntimeError,'Controller rejected'):
+            r.preflight_route([('start',(200,0,20,0)),('transfer',(220,0,20,0))])
+        r.arm.limited=lambda p:False; r.arm.unsupported=True
+        with self.assertRaisesRegex(RuntimeError,'query unavailable'):
+            r.preflight_route([('start',(200,0,20,0))])
+        self.assertFalse(any(isinstance(c,tuple) and c[0]=='move' for c in r.arm.calls))
+        r.s.controller_preflight=False
+        r.preflight_route([('start',(200,0,20,0))])
+        self.assertIn('disabled',r.diagnostics['preflight']); r.disconnect()
+
+    def test_alarm_during_motion_stops_queue_and_latches_details(self):
+        r=self.robot(); r.home()
+        def move(*pose,**kwargs):
+            r.arm.calls.append(('move',pose,kwargs)); r.arm.pending=True
+            r.arm.alarms[8]=1; r.arm.index+=1; return r.arm.index
+        r.arm.move_to=move
+        with patch.dict('sys.modules',{'dobotkit':SimpleNamespace(PTPMode=SimpleNamespace(MOVL_XYZ=2))}):
+            with self.assertRaisesRegex(RuntimeError,'J1 positive limit'): r.move((210,0,20,0))
+        self.assertFalse(r.homed); self.assertEqual(r.diagnostics['alarms'],[64])
+        self.assertIn('clear',r.arm.calls); self.assertEqual(r.diagnostics['target']['x'],210)
+        r.clear_alarms(); self.assertFalse(r.homed); self.assertEqual(r.diagnostics['alarms'],[])
+        r.disconnect()
+
+    def test_silent_stall_reports_target_actual_and_requires_home(self):
+        r=self.robot(motion_stall_timeout=.05,motion_timeout=2); r.home(); r.arm.mismatch=True; r.arm.pending=True
+        with patch.dict('sys.modules',{'dobotkit':SimpleNamespace(PTPMode=SimpleNamespace(MOVL_XYZ=2))}):
+            with self.assertRaisesRegex(RuntimeError,'No reported motion progress'): r.move((210,0,20,0))
+        self.assertFalse(r.homed); self.assertIn('Requested:',r.diagnostics['fault']); self.assertIn('Reported:',r.diagnostics['fault'])
+        self.assertIn('clear',r.arm.calls); r.disconnect()
+
+    def test_unavailable_alarm_feedback_does_not_disable_stall_watchdog(self):
+        r=self.robot(motion_stall_timeout=.05,motion_timeout=2); r.home()
+        r.arm.cmds.get_alarms_state=lambda:{'unsupported_format':[]}
+        r.arm.mismatch=True; r.arm.pending=True
+        with patch.dict('sys.modules',{'dobotkit':SimpleNamespace(PTPMode=SimpleNamespace(MOVL_XYZ=2))}):
+            with self.assertRaisesRegex(RuntimeError,'No reported motion progress'): r.move((210,0,20,0))
+        self.assertIn('unavailable',r.diagnostics['alarm_monitor']); self.assertFalse(r.homed); r.disconnect()
+
+    def test_batch_preflight_failure_prevents_gripping_and_saves_diagnostics(self):
+        r=self.robot(safe_z=100); r.home(); r.arm.limited=lambda p:p['z']>70
+        with tempfile.TemporaryDirectory() as folder:
+            output,status=Experiment(r.s,r.control,lambda e:None,lambda *p:None,Path(folder),r,None,rehearsal=True).run()
+            self.assertEqual(status,'failed')
+            self.assertFalse(any(isinstance(c,tuple) and c[0] in ('move','grip') for c in r.arm.calls))
+            report=json.loads((output/'robot-diagnostics.json').read_text())
+            self.assertIn('Controller rejected',report['fault']); self.assertEqual(report['target']['z'],100)
+            self.assertFalse(list(output.glob('*.csv')))
+        self.assertFalse(r.homed); r.disconnect()
     def test_motion_mismatch_stops_queue(self):
         r=self.robot(motion_timeout=.15); r.home(); r.arm.mismatch=True
         with patch.dict('sys.modules',{'dobotkit':SimpleNamespace(PTPMode=SimpleNamespace(MOVL_XYZ=2))}),self.assertRaises(TimeoutError):

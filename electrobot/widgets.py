@@ -108,7 +108,7 @@ QPushButton:hover { background:#eaf4f3; border-color:#69b0a7; }
 QPushButton#primary { background:#0d8a7d; color:white; border-color:#0d8a7d; }
 QPushButton#primary:hover { background:#08776c; }
 QPushButton#danger { color:#b54747; }
-QPushButton:disabled { background:#eef2f5; color:#a4b1ba; border-color:#e0e6eb; }
+QPushButton:disabled, QPushButton#primary:disabled, QPushButton#danger:disabled { background:#eef2f5; color:#a4b1ba; border-color:#e0e6eb; }
 QSpinBox,QDoubleSpinBox,QLineEdit,QComboBox { border:1px solid #cad7df; border-radius:5px; padding:7px; background:white; selection-background-color:#0d8a7d; }
 QSpinBox:focus,QDoubleSpinBox:focus,QLineEdit:focus,QComboBox:focus { border:1px solid #0d8a7d; }
 QProgressBar { border:none; background:#e9eff3; border-radius:5px; height:20px; text-align:center; }

@@ -24,7 +24,7 @@ class Window(QMainWindow):
         self.resize(1440,960); self.setMinimumSize(1120,760)
         self.s=Settings(); self.fields={}; self.busy=False; self.running_batch=False
         self.paused=False; self.camera=None; self.last_frame=None; self.output=None
-        self._close_pending=False; self._shutdown_sent=False; self.current_pose=None
+        self._close_pending=False; self._shutdown_sent=False; self.current_pose=None; self.robot_diagnostics={}
         self.device_state={'robot':False,'potentiostat':False,'homed':False,'holding':False}
         if (ROOT/'settings.json').exists():
             try: self.s=Settings(**json.loads((ROOT/'settings.json').read_text())).validate()
@@ -68,6 +68,7 @@ class Window(QMainWindow):
         self.fields['fixture_verified'].toggled.connect(self.refresh_controls)
         self.nav.currentRowChanged.connect(self.change_page); self.nav.setCurrentRow(0)
         self.worker=DeviceWorker(ROOT/'runs'); self.worker.state.connect(self.on_devices)
+        self.worker.diagnostic.connect(self.on_diagnostic)
         self.worker.pose.connect(self.on_pose); self.worker.event.connect(self.on_event)
         self.worker.point.connect(self.plot.add); self.worker.result.connect(self.on_result)
         self.worker.completed.connect(self.on_completed); self.worker.finished.connect(self.on_worker_finished); self.worker.start()
@@ -131,9 +132,12 @@ class Window(QMainWindow):
                 else: f.setText(getattr(s,key))
             finally: f.blockSignals(False)
         s.mode=self.mode.currentData(); self.s=s; self.update_sketch(); self.prepare_queue(); self.update_calibration_feedback()
-    def update_calibration_feedback(self):
+    def update_calibration_feedback(self,*args,invalidate=True):
         if not hasattr(self,'workspace_diagram'): return
         s=self.read_settings(validate=False)
+        if self.robot_diagnostics and invalidate:
+            self.robot_diagnostics['preflight']='Not checked for current settings'
+            self.update_diagnostic_labels()
         self.validation_issues=s.calibration_issues()
         try: s.validate()
         except ValueError as exc:
@@ -143,6 +147,7 @@ class Window(QMainWindow):
         for key,f in self.fields.items():
             f.setStyleSheet('border: 2px solid #c34848;' if key in bad else '')
         messages=list(dict.fromkeys(message for _,message in self.validation_issues))
+        if self.robot_diagnostics.get('fault'): messages.append(self.robot_diagnostics['fault'])
         text=('Check settings:\n'+'\n'.join('• '+m for m in messages[:12])+(f'\n… {len(messages)-12} more issues' if len(messages)>12 else '')) if messages else '✓ Dimensions and selected route endpoints are compatible. Physical clearance still needs verification.'
         for label in (self.calibration_feedback,self.workspace_feedback,self.rack_feedback):
             label.setText(text); label.setStyleSheet('color: #b53636;' if messages else 'color: #08796f;')
@@ -227,7 +232,9 @@ class Window(QMainWindow):
         activity,al=card('Activity'); self.log=QPlainTextEdit(); self.log.setReadOnly(True); self.log.setMaximumBlockCount(2000); self.log.setMinimumHeight(60); al.addWidget(self.log); rl.addWidget(activity,2)
         self.main_split.addWidget(right)
         electrodes,el=card('Robot & electrode queue')
-        self.experiment_tracker=RobotTracker(); self.experiment_tracker.setMinimumHeight(340); el.addWidget(self.experiment_tracker,3)
+        self.experiment_diagnostic=self.note('Robot checks: not yet run'); el.addWidget(self.experiment_diagnostic)
+        el.addWidget(button('Robot diagnostic details…',self.show_robot_diagnostics))
+        self.experiment_tracker=RobotTracker(); self.experiment_tracker.setMinimumHeight(280); el.addWidget(self.experiment_tracker,3)
         el.addWidget(QLabel('Electrode queue'))
         self.queue_table=QTableWidget(0,3); self.queue_table.setHorizontalHeaderLabels(['Rack slot','Electrode','Status']); self.queue_table.verticalHeader().hide()
         self.queue_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch); self.queue_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -250,6 +257,11 @@ class Window(QMainWindow):
             b=button(text,lambda checked=False,c=command:self.submit(c)); actions.addWidget(b); self.manual_buttons.append(b)
         self.manual_stop=button('Stop robot',self.stop_run); self.manual_stop.setObjectName('danger'); actions.addWidget(self.manual_stop); actions.addStretch(); l.addLayout(actions)
         self.pose_label=QLabel('X —    Y —    Z —    R —'); self.pose_label.setObjectName('metric'); l.addWidget(self.pose_label)
+        self.manual_diagnostic=self.note('Robot checks: not yet run'); l.addWidget(self.manual_diagnostic)
+        checks=QHBoxLayout()
+        self.manual_route_check=button('Check planned route · no motion',lambda:self.submit('check_route')); checks.addWidget(self.manual_route_check)
+        self.alarm_clear=button('Clear controller alarms',lambda:self.submit('clear_alarms')); checks.addWidget(self.alarm_clear)
+        checks.addWidget(button('Diagnostic details…',self.show_robot_diagnostics)); l.addLayout(checks)
         row=QHBoxLayout(); jog,jl=card('Jog'); step_row=QHBoxLayout(); step_row.addWidget(QLabel('Step (mm / degrees)')); self.jog_step=QDoubleSpinBox(); self.jog_step.setRange(.1,20); self.jog_step.setValue(1); step_row.addWidget(self.jog_step); step_row.addStretch(); jl.addLayout(step_row)
         grid=QGridLayout()
         for axis,name in enumerate('XYZR'):
@@ -328,6 +340,9 @@ class Window(QMainWindow):
         bounds.addWidget(self.settings_group('Cartesian bounds (mm)', [(f'workspace_{axis}_{end}',f'{axis.upper()} {end}',-400,400) for axis in 'xyz' for end in ('min','max')]))
         bounds.addWidget(self.settings_group('Radial bounds from base (mm)', [('workspace_radius_min','Minimum radius',0,400),('workspace_radius_max','Maximum radius',1,400)]))
         bounds.addWidget(self.settings_group('Rinse footprint (mm)', [('rinse_beaker_diameter','Rinse beaker diameter',10,250)]))
+        bounds.addWidget(self.settings_group('Controller reachability and fault detection', [('controller_preflight','Check controller pose limits before movement'),('reachability_step','Route sample spacing (mm)',1,50),('motion_stall_timeout','No-progress timeout (s)',1,60)]))
+        self.route_check=button('Check planned route · no movement',lambda:self.submit('check_route')); bounds.addWidget(self.route_check)
+        bounds.addWidget(self.note('Connected/homed Hardware robot required. Asks DobotLink CheckPoseLimit about XYZ/R at station heights, Travel Z and sampled straight transfers. This detects supported controller limits, not obstacles or full collision clearance. Unsupported firmware blocks this check; disabling it explicitly leaves configured bounds, alarm monitoring and the progress watchdog. A passed check applies only to that settings snapshot.'))
         bounds.addStretch()
         cell=self.settings_tab('Cell & carrier'); row=QHBoxLayout()
         row.addWidget(self.settings_group('Beaker & cap (mm)', [('beaker_diameter','Body diameter'),('beaker_height','Beaker height'),('rim_diameter','Measured rim diameter'),('cap_clearance','Diametral clearance'),('cap_wall','Skirt wall'),('cap_thickness','Plate thickness'),('skirt_depth','Skirt depth'),('re_hole','RE opening'),('ce_hole','CE opening'),('port_offset','RE/CE offset')]))
@@ -395,11 +410,43 @@ class Window(QMainWindow):
         gripper_labels={'closed':'closed · pump on / electrode may be held','released':'released · pump off','fully_open':'fully open · pump on','unknown':'unknown'}
         self.grip_label.setText('Commanded state: '+gripper_labels[state.get('gripper_state','unknown')]+'. No pickup sensor is configured.')
         self.refresh_controls()
+    def on_diagnostic(self,data):
+        previous=self.robot_diagnostics.get('fault','').split('\n')[0]
+        self.robot_diagnostics=dict(data)
+        fault=data.get('fault','')
+        if fault and fault.split('\n')[0]!=previous: self.log.appendPlainText('Robot: '+fault)
+        if fault and not self.running_batch: self.state.setText('Robot fault')
+        elif previous and not self.running_batch: self.state.setText('Ready')
+        self.update_diagnostic_labels()
+        if fault:
+            for label in (self.calibration_feedback,self.workspace_feedback):
+                label.setText('Robot check: '+fault); label.setStyleSheet('color: #b53636;')
+        elif previous: self.update_calibration_feedback(invalidate=False)
+        self.refresh_controls()
+    def update_diagnostic_labels(self):
+        d=self.robot_diagnostics
+        def xyz(p): return ', '.join(f'{p[k]:.2f}' for k in ('x','y','z')) if p else '—'
+        fault=bool(d.get('fault'))
+        text=('ROBOT FAULT · open details\n' if fault else '')+'Target XYZ: '+xyz(d.get('target'))+'\nReported XYZ: '+xyz(d.get('actual'))
+        text+='\n'+str(d.get('preflight','Checks not yet run'))
+        if str(d.get('alarm_monitor','')).startswith('unavailable'): text+='\nAlarm feedback unavailable — details'
+        for label in (self.experiment_diagnostic,self.manual_diagnostic):
+            label.setText(text); label.setStyleSheet('color: #a42b2b; background: #fff0ed; padding: 4px; font-size: 11px;' if fault else 'font-size: 11px;')
+    def show_robot_diagnostics(self):
+        d=self.robot_diagnostics
+        report=json.dumps(d,indent=2) if d else 'No controller diagnostics yet. Connect the robot and use Check planned route.'
+        dialog=QMessageBox(self); dialog.setWindowTitle('Robot diagnostics — target, reported pose and faults')
+        dialog.setText(d.get('fault') or d.get('preflight','Controller checks not yet run'))
+        dialog.setInformativeText('Coordinates are reported tool XYZ/R. An alarm or stalled move requires inspection; clearing alarms does not home or resume the route.')
+        dialog.setDetailedText(report)
+        copy=dialog.addButton('Copy diagnostic report',QMessageBox.ButtonRole.ActionRole)
+        copy.clicked.connect(lambda:QApplication.clipboard().setText(report))
+        dialog.addButton(QMessageBox.StandardButton.Close); dialog.exec()
     def refresh_controls(self):
         idle=not self.busy and not self._close_pending; hardware=self.mode.currentData()=='hardware'; d=self.device_state
         self.mode.setEnabled(idle and not d.get('robot') and not d.get('potentiostat') or idle and self.mode.currentData()=='simulation')
         # Switching modes owns teardown in the worker; hardware users disconnect first.
-        ready=not getattr(self,'validation_issues',[]) and (not hardware or (d.get('homed',False) and self.fields['calibrated'].isChecked() and self.fields['fixture_verified'].isChecked()))
+        ready=not getattr(self,'validation_issues',[]) and (not hardware or (not self.robot_diagnostics.get('fault') and d.get('homed',False) and self.fields['calibrated'].isChecked() and self.fields['fixture_verified'].isChecked()))
         self.preset_button.setEnabled(idle and d.get('robot',False) and not d.get('holding',False) and (not hardware or d.get('homed',False)))
         self.start.setEnabled(idle and ready and not d.get('holding',False) and d.get('robot',False) and d.get('potentiostat',False))
         self.start.setToolTip('Hardware: connect both devices, home the robot, and verify calibration and the fixture in Settings.')
@@ -416,6 +463,9 @@ class Window(QMainWindow):
         for key in ('rack_x','rack_y'): self.fields[key].setEnabled(idle and not radial)
         self.placement_export.setEnabled(idle); self.rack_export.setEnabled(idle)
         self.lattice_preset.setEnabled(idle)
+        can_check=idle and hardware and d.get('robot',False) and d.get('homed',False)
+        self.route_check.setEnabled(can_check); self.manual_route_check.setEnabled(can_check)
+        self.alarm_clear.setEnabled(idle and hardware and d.get('robot',False))
         lattice=self.fields['rack_design'].currentData()=='lattice'
         for group in (self.holder_group,self.lattice_group,self.module_group):
             group.setEnabled(idle and lattice); group.setVisible(lattice)

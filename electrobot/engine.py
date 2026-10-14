@@ -30,13 +30,19 @@ class SimRobot:
     def __init__(self,settings,control):
         self.s=settings; self.control=control; self.holding=False; self.homed=True; self.gripper_state='released'
         self.current_pose={'x':200.0,'y':0.0,'z':80.0,'r':0.0}; self.pose_callback=lambda p:None
+        self.diagnostic_callback=lambda d:None
+        self.diagnostics={'target':None,'actual':dict(self.current_pose),'fault':'','preflight':'Simulation; no controller reachability check'}
+    def diagnostic(self,**values):
+        self.diagnostics.update(values); self.diagnostic_callback(dict(self.diagnostics))
     def move(self,pose):
         self.s.validate_pose(pose)
         target=dict(zip(('x','y','z','r'),(*pose,self.s.tool_r) if len(pose)==3 else pose))
+        self.diagnostic(target=target)
         start=dict(self.current_pose)
         for step in range(1,11):
             self.control.wait(.08/self.s.simulation_speed)
             self.current_pose={k:start[k]+(target[k]-start[k])*step/10 for k in target}
+            self.diagnostic(actual=dict(self.current_pose))
             self.pose_callback(dict(self.current_pose))
     def grip(self,closed):
         self.control.wait(.4/self.s.simulation_speed); self.holding=closed
@@ -46,7 +52,7 @@ class SimRobot:
 
     def connect(self): self.pose_callback(self.current_pose)
     def disconnect(self): pass
-    def pose(self): self.pose_callback(self.current_pose); return dict(self.current_pose)
+    def pose(self): self.diagnostic(actual=dict(self.current_pose)); self.pose_callback(self.current_pose); return dict(self.current_pose)
     def home(self): self.move((200,0,80,0)); self.homed=True
     def stop(self): pass
 
@@ -106,6 +112,9 @@ class Experiment:
         def lift(x,y): robot.move((x,y,s.safe_z))
         try:
             if pot is not None: pot.cell_off()
+            if s.mode=='hardware' and hasattr(robot,'preflight_route'):
+                emit('preflight','Checking planned lift, transfer and station poses without moving')
+                robot.preflight_route(s.planned_route(tuple(initial[k] for k in ('x','y','z','r'))))
             if self.rehearsal: emit('rehearsal','Robot-only rehearsal: gripper actuates; no measurement or electrochemistry data')
             robot.grip(False)
             for electrode in range(s.first_electrode,s.first_electrode+s.electrodes):
@@ -150,6 +159,8 @@ class Experiment:
             except Exception as exc: cleanup_errors.append(f'Cell off failed: {exc}')
             for error in cleanup_errors: emit('cleanup_error',error)
             if cleanup_errors: status='failed'
+            if s.mode=='hardware' and hasattr(robot,'diagnostics'):
+                (folder/'robot-diagnostics.json').write_text(json.dumps(robot.diagnostics,indent=2))
             (folder/'events.json').write_text(json.dumps(log,indent=2))
             (folder/'summary.json').write_text(json.dumps({'run_type':'robot_rehearsal' if self.rehearsal else 'experiment','measurement_performed':not self.rehearsal,'mode':s.mode,'status':status,'run_name':s.run_name,'cleanup_errors':cleanup_errors,
                  'grip_state_is_commanded':True,'holding_electrode':robot.holding,'last_electrode':electrode},indent=2))

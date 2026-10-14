@@ -6,7 +6,7 @@ from .engine import Control,Cancelled,Experiment,SimRobot,SimPotentiostat
 from .drivers import DobotRobot,PalmSensPotentiostat
 
 class DeviceWorker(QThread):
-    state=Signal(dict); pose=Signal(dict); event=Signal(dict)
+    state=Signal(dict); pose=Signal(dict); event=Signal(dict); diagnostic=Signal(dict)
     point=Signal(int,float,float,float); result=Signal(str,str)
     completed=Signal(str,bool,str)
     def __init__(self,output):
@@ -46,13 +46,15 @@ class DeviceWorker(QThread):
             else:
                 self.robot=DobotRobot(s,control); self.pot=PalmSensPotentiostat(s)
             self.robot.pose_callback=self.emit_pose
+            self.robot.diagnostic_callback=self.diagnostic.emit
+            self.diagnostic.emit(dict(self.robot.diagnostics))
         self.robot.s=s; self.robot.control=control; self.pot.s=s
     def run(self):
         while True:
             try: command,s,payload,control=self.commands.get(timeout=.5)
             except queue.Empty:
                 if self.mode=='hardware' and self.robot_connected:
-                    try: self.robot.pose()
+                    try: self.robot.poll_health(); self.publish()
                     except Exception: self.pose.emit({})  # Hide unavailable feedback; retry next idle poll.
                 continue
             if command=='shutdown':
@@ -77,6 +79,8 @@ class DeviceWorker(QThread):
                     folder,status=Experiment(s,control,self.event.emit,self.point.emit,self.output,
                         self.robot,self.pot if self.pot_connected else None,rehearsal=command=='rehearse').run()
                     self.result.emit(str(folder),status)
+                    if status=='failed':
+                        ok=False; message=getattr(self.robot,'diagnostics',{}).get('fault') or 'Batch failed; see Activity and the saved run events.'
                 else:
                     if not self.robot_connected: raise RuntimeError('Connect the robot first')
                     if command=='home': self.robot.home()
@@ -87,6 +91,11 @@ class DeviceWorker(QThread):
                         axis,delta=payload; target[axis]+=delta; self.robot.move(target)
                     elif command=='grip': self.robot.grip(payload)
                     elif command=='open_fully': self.robot.open_fully()
+                    elif command=='check_route':
+                        if self.mode!='hardware': raise ValueError('Controller route check requires Hardware mode and a connected robot')
+                        pose=self.robot.pose()
+                        self.robot.preflight_route(s.planned_route(tuple(pose[k] for k in ('x','y','z','r'))))
+                    elif command=='clear_alarms': self.robot.clear_alarms()
                     elif command=='stop': self.robot.stop()
                     else: raise ValueError(f'Unknown command: {command}')
                     if command!='stop': self.robot.pose()

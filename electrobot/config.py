@@ -15,6 +15,9 @@ class Settings:
     home_timeout: float = 60.0
     position_tolerance: float = 1.0
     rotation_tolerance: float = 1.0
+    controller_preflight: bool = True
+    reachability_step: float = 10.0
+    motion_stall_timeout: float = 5.0
     tool_r: float = 0.0
     grip_dwell: float = 0.7
     workspace_x_min: float = -300.0
@@ -137,7 +140,7 @@ class Settings:
             if not 0 < getattr(self,key) <= 100:
                 raise ValueError(f'{key} must be between 0 and 100')
         for key in ('robot_timeout','motion_timeout','home_timeout','position_tolerance',
-                    'rotation_tolerance','grip_dwell','sdk_timeout'):
+                    'rotation_tolerance','grip_dwell','sdk_timeout','reachability_step','motion_stall_timeout'):
             if getattr(self,key) <= 0:
                 raise ValueError(f'{key} must be positive')
         for axis in 'xyz':
@@ -249,6 +252,23 @@ class Settings:
             return (radius*math.cos(angle),radius*math.sin(angle),self.rack_z)
         return (self.rack_x+((index-1)%self.rack_columns)*self.rack_pitch,
                 self.rack_y+((index-1)//self.rack_columns)*self.rack_pitch,self.rack_z)
+
+    def planned_route(self,initial):
+        """Handling waypoints, including lifts and transfers, without movement."""
+        current=tuple(initial); route=[('Current pose',current)]
+        for index in range(self.first_electrode,self.first_electrode+self.electrodes):
+            rack=(*self.rack_pose(index),self.tool_r)
+            cell=(self.cell_x,self.cell_y,self.cell_z,self.tool_r)
+            rinse=(self.rinse_x,self.rinse_y,self.rinse_z,self.tool_r)
+            stages=[(f'WE {index} pickup',rack),(f'WE {index} cell seat',cell),(f'WE {index} retrieve',cell)]
+            stages += [(f'WE {index} rinse {dip+1}',rinse) for dip in range(self.rinse_dips)]
+            stages.append((f'WE {index} return',rack))
+            for label,target in stages:
+                route.extend(((label+' lift',(current[0],current[1],self.safe_z,self.tool_r)),
+                              (label+' transfer',(target[0],target[1],self.safe_z,self.tool_r)),(label,target),
+                              (label+' exit',(target[0],target[1],self.safe_z,self.tool_r))))
+                current=route[-1][1]
+        return route
 
     def rack_export_positions(self):
         # Complete rows through the last selected slot; inactive slots remain

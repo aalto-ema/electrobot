@@ -19,6 +19,7 @@ Last reviewed: 2026-10-14. Update this document when capabilities or physical ev
 - Simulation and lazy hardware adapters, explicit connection/homing, queued motion verification and live pose feedback.
 - CV batches, original-slot return, dipping rinse, cancellation/failure records and partial measurement export.
 - Robot-only rehearsal and a compact preset anchored to a freshly reported pose.
+- Non-moving controller reachability queries for configured handling routes and manual moves; sampled station/lift/transfer checks, runtime alarm monitoring, no-progress watchdog and persistent copyable target/actual/fault feedback. Firmware support is not yet verified on the lab controller; unsupported queries are reported explicitly.
 - Main-page plot/camera/queue; manual jog, absolute moves, teaching and three gripper commands.
 - Persistent settings, inline geometric checks and pinned calibration/workspace diagrams.
 - PDF placement templates, legacy socket rack and modular holder-supported rack exports.
@@ -28,9 +29,9 @@ Last reviewed: 2026-10-14. Update this document when capabilities or physical ev
 
 ## Physical evidence and assumptions
 
-The user supplied working basic Dobot movement code and camera capture code, and reported the gripper's three pneumatic states. The full application hardware adapters and sequence have **not been reported as commissioned on the actual lab setup**.
+The user supplied working basic Dobot movement code and camera capture code, reported the gripper's three pneumatic states, and has begun robot rehearsal with the application. On 2026-10-14 they reported a stopped move after setting Travel Z to 100 mm, with Manual robot showing X=200, Y=0, Z=68.80, R=0. This suggests the initial vertical lift may have failed before sideways travel, but the cause is not confirmed by controller alarm data. This single observation is not a measured reach envelope. Full robot/potentiostat commissioning remains incomplete.
 
-Default station coordinates and workspace limits are placeholders. Robot feedback is tool pose, not successful pickup. There is no camera-based pickup detection, continuity sensor, force feedback, obstacle model or autonomous recovery.
+Default station coordinates and workspace limits are placeholders. Robot feedback is tool pose, not successful pickup. The new controller-sampled preflight and alarm/stall handling have passed mocked tests, not this physical fault scenario. There is no camera-based pickup detection, continuity sensor, force feedback, obstacle model or autonomous recovery.
 
 The modular example uses an 18 mm body / 24 mm flange holder, 13 mm rod insertion and a 100 mm rod, leaving 87 mm hanging. Its physical seat is 97 mm above the bench for 10 mm tip clearance. Feet use provisional push fits and must be fixed to the bench. Holder retention, grip envelope, tall-foot stiffness, printing clearance and material compatibility remain untested.
 

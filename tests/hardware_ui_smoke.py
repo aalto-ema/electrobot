@@ -60,6 +60,24 @@ with tempfile.TemporaryDirectory() as d,patch.object(worker_module,'DobotRobot',
     assert 'False,nominal_cv_step' in (w.output/'electrode-001.csv').read_text()
     assert not w.pause.isEnabled() and not w.plot.synthetic
     assert sdk.manager.calls[-1]==('cell',False)
+    # Reproduce a Z-dependent limit rejection without commanding any motion.
+    arm=w.worker.robot.arm; arm.current['z']=68.8; arm.limited=lambda p:p['z']>70
+    w.fields['safe_z'].setValue(100)
+    before=[c for c in arm.calls if isinstance(c,tuple) and c[0]=='move']
+    w.submit('check_route'); idle()
+    assert [c for c in arm.calls if isinstance(c,tuple) and c[0]=='move']==before
+    assert w.robot_diagnostics['target']['z']==100 and w.robot_diagnostics['actual']['z']==68.8
+    assert w.robot_diagnostics['rejected_pose']['z']>70
+    assert 'ROBOT FAULT' in w.experiment_diagnostic.text() and not w.start.isEnabled()
+    assert warnings and 'Controller rejected' in warnings[-1]; warnings.clear()
+    w.nav.setCurrentRow(0); w.resize(1280,900); app.processEvents()
+    assert w.width()<=1280 and w.height()<=900
+    w.grab().save('cad/ui-robot-fault.png')
+    w.nav.setCurrentRow(1); app.processEvents(); w.grab().save('cad/ui-manual-robot-fault.png')
+    arm.limited=lambda p:False; w.fields['safe_z'].setValue(5)
+    w.submit('clear_alarms'); idle(); assert not w.device_state['homed']
+    w.submit('home'); idle(); assert not w.robot_diagnostics['fault']
+    w.submit('check_route'); idle(); assert 'passed' in w.robot_diagnostics['preflight']
     w.fields['calibrated'].setChecked(True); w.fields['rack_x'].setValue(191); assert not w.fields['calibrated'].isChecked()
     w.submit('grip',True); idle(); w.disconnect_devices(); assert not w.busy and w.device_state['robot']
     w.close(); app.processEvents(); assert w.isVisible() and w.worker.isRunning()

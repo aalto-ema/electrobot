@@ -13,6 +13,7 @@ This document maps implementation responsibilities. User setup and operation bel
 | `worker.py` | Serialized device owner, mode/connection state, idle pose polling, command execution and Qt signals |
 | `engine.py` | Experiment/rehearsal sequencing, cancellable waits, simulation adapters and run output |
 | `drivers.py` | Lazy Dobot/PalmSens adapters, queue/pose checks, SDK method mapping, units and cleanup |
+| `robot_checks.py` | Sampled non-moving route checks and DobotLink alarm-byte decoding |
 | `camera.py` | Independent OpenCV capture worker and camera discovery |
 | `widgets.py` | Shared styling, controls, CV plot, camera preview and cap sketch |
 | `calibration_widgets.py` | Coordinate diagrams and live XY/XZ robot trackers |
@@ -35,6 +36,20 @@ The hardware adapter calls `dobotkit 0.2.0`'s `set_speed(velocity, acceleration)
 Station/transfer settings use reported tool Z. CAD uses physical bench height and print-local coordinates. A manifest records how print-local XY maps back to robot XY; modular tops additionally require rotation. Teaching actual tool Z remains a commissioning step.
 
 Geometry changes clear relevant readiness flags. `calibration_issues()` feeds inline messages, field highlights and start eligibility. `validate()` checks broader parameter consistency, and `validate_batch()` adds hardware readiness/pose checks. Extending settings should keep these layers coherent.
+
+### Controller reachability and motion diagnostics
+
+`Settings.planned_route(initial)` enumerates selected rack/cell/rinse handling waypoints, including initial lift, all station Z values, Travel Z and rinse repetitions. Before hardware handling, the driver queries `Magician.CheckPoseLimit` without movement using Cartesian XYZ/R (`isJoint=False`). It checks route samples at configurable spacing (default 10 mm, with at most 5° between R samples), including the exact closest XY approach to the base for the configured inner radius. A per-command cache avoids repeating identical controller queries. Manual moves also check the current-to-target segment. This detects supported controller pose limits at samples, not obstacles, continuous-path clearance, all IK branches or firmware-independent kinematics. Home remains an explicit controller operation outside these straight-move checks.
+
+The non-moving **Check planned route** command is exposed in Manual robot and Workspace. Unsupported/malformed controller responses block enabled preflight; the user may explicitly disable it in Workspace, leaving configured bounds and runtime diagnostics. No automatic fallback or guessed reach envelope is used. The check is not a replacement for physical calibration. It can take multiple RPCs and remains cancellable between calls.
+
+During motion, alarm reads accompany pose/queue polling. DobotLink's `state` array is decoded as alarm bitmask bytes, not a list of alarm IDs. The driver retains raw feedback, numeric IDs, descriptive labels, requested target, reported XYZ/R/joint data when supplied, rejected sample and the last fault. A default 5 s no-progress watchdog stops/clears the queue when an unfinished move reports no accumulated 0.2 mm/0.2° progress; it reports a possible limit/obstruction/controller issue rather than claiming the cause is known. A separate overall motion timeout remains. Failed motion invalidates homing, and fault details persist until explicit recovery. A failed experiment now also produces a failed worker completion for visible UI feedback.
+
+`DeviceWorker.diagnostic` publishes reports to persistent Experiment/Manual labels, pinned calibration feedback, Activity and a copyable details dialog. Idle polling also reads alarms. Missing alarm feedback is shown as unavailable; it is not interpreted as all-clear. **Clear controller alarms** stops/clears the queue and explicitly clears controller flags without moving or releasing the gripper; it does not rehome, resume or reverify the route. A successful home clears the latched fault and invalidates prior preflight status.
+
+Hardware run folders include `robot-diagnostics.json` with the retained diagnostic state, including faults from preflight before handling. Manual-only failures remain in Activity and the copyable dialog.
+
+Protocol basis, inspected 2026-10-14: [DobotLink pose/alarm encoders and decoders](https://github.com/Dobot-Arm/DobotLink/blob/main/Plugins/MagicDevicePlugin/Protocol2/DMagicianProtocol.cpp), [Magician Lite virtual-controller alarm definitions](https://github.com/Dobot-Arm/DobotLink/blob/main/Plugins/MagicDevicePlugin/magicianlite_virtual/src/algorithm/alarms.h). Actual lab firmware support/response behavior remains to be commissioned. Generic numeric IDs and raw responses remain available even when labels are incomplete.
 
 ## CAD and exports
 

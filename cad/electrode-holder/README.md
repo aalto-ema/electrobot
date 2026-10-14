@@ -2,6 +2,14 @@
 
 This is the new **stationary cell contact** prototype. It does not automatically replace the app's generic rack exporter or the older gripper-mounted probe concept. No lab profile, robot sequence or taught position is changed.
 
+## Latest concept: fixed bottom contacts (2026-10-14)
+
+The user-selected next design uses a copper ring on the bottom face of the holder's narrower lower section and two **fixed metal bars** on the ledge of a removable cup-shaped insert. A small holder passage carries the insulated wire from the ring to the top terminal socket. Two symmetric wire channels in the insert meet at one recessed junction for the WE cable. The copper ring must reach the bars before another plastic surface stops insertion; contact flatness and repeatable continuity remain untested. Bar/wire sizes and insert-to-cap dimensions remain to be selected.
+
+![Fixed-contact concept and wire routing](fixed-contact-concept.png)
+
+This schematic supersedes the spring-contact proposals as the design direction. The STL files and dimensions below still describe the earlier side-band prototype. Regenerate the concept SVG/PNG with `QT_QPA_PLATFORM=offscreen .venv/bin/python cad/electrode-holder/fixed_contact_concept.py` on macOS, or `.venv\Scripts\python.exe cad\electrode-holder\fixed_contact_concept.py` on Windows, from the repository root.
+
 ![Exact mesh preview](holder-preview.png)
 
 ## Print files

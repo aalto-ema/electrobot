@@ -1,0 +1,83 @@
+"""Render the user-selected fixed-contact concept; not manufacturing geometry."""
+from pathlib import Path
+from PySide6.QtWidgets import QApplication
+from PySide6.QtSvg import QSvgRenderer
+from PySide6.QtGui import QImage, QPainter, QColor
+
+folder = Path(__file__).resolve().parent
+svg = '''<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1060" viewBox="0 0 1500 1060">
+<defs><style>text{font-family:Arial,sans-serif;fill:#253b4c;font-size:21px}.title{font-size:33px;font-weight:bold}.head{font-size:25px;font-weight:bold}.small{font-size:18px}.lead{fill:none;stroke:#566c7c;stroke-width:2}</style></defs>
+<rect width="1500" height="1060" fill="#f3f6fa"/>
+<text x="35" y="48" class="title">Holder + removable insert — fixed contacts and protected wiring</text>
+<text x="35" y="82">Based on your sketches • concept sections and top view • no dimensions implied</text>
+<rect x="25" y="110" width="705" height="475" rx="12" fill="white" stroke="#d4dfe7"/>
+<rect x="750" y="110" width="725" height="475" rx="12" fill="white" stroke="#d4dfe7"/>
+<text x="50" y="149" class="head">1. Holder — section through wire passage</text>
+<!-- holder section -->
+<path d="M250 260 H530 V315 H490 V430 H290 V315 H250 Z" fill="#b5a5d5" stroke="#546679" stroke-width="2"/>
+<rect x="375" y="260" width="30" height="245" fill="#415361"/>
+<rect x="385" y="201" width="10" height="59" fill="#c5a34e"/>
+<rect x="380" y="195" width="20" height="24" rx="3" fill="#bec9d3" stroke="#546679"/>
+<!-- small passage and recessed termination, below contact face -->
+<path d="M450 260 V417 H475" fill="none" stroke="#f4f0fa" stroke-width="15"/>
+<path d="M400 206 C445 206 450 227 450 260 V417 H475 V430" fill="none" stroke="#c77d32" stroke-width="4"/>
+<path d="M290 430 H375 M405 430 H490" stroke="#c77d32" stroke-width="7"/>
+<text x="64" y="206">Terminal socket</text><path d="M222 210 H378" class="lead"/>
+<text x="501" y="359">Wire passage</text><path d="M496 366 L452 374" class="lead"/>
+<text x="64" y="459">Bottom copper ring</text><path d="M254 454 L321 430" class="lead"/>
+<text x="70" y="545" class="small">Wire joint sits in a recess; the copper contact face stays flat.</text>
+<!-- insert top view -->
+<text x="775" y="149" class="head">2. Insert — top view, holder removed</text>
+<circle cx="1105" cy="345" r="164" fill="#9bcfbe" stroke="#466f64" stroke-width="2"/>
+<circle cx="1105" cy="345" r="126" fill="#cbe6dd" stroke="#466f64" stroke-width="2"/>
+<circle cx="1105" cy="345" r="40" fill="white" stroke="#466f64" stroke-width="2"/>
+<!-- symmetric channels and wires, meeting at bottom -->
+<path d="M1000 345 H964 C961 429 1005 481 1105 489 M1210 345 H1246 C1249 429 1205 481 1105 489" fill="none" stroke="#f6fcf9" stroke-width="16"/>
+<path d="M1000 345 H964 C961 429 1005 481 1105 489 M1210 345 H1246 C1249 429 1205 481 1105 489" fill="none" stroke="#c77d32" stroke-width="4"/>
+<!-- supported fixed bars -->
+<rect x="995" y="335" width="70" height="20" rx="2" fill="#cab16b" stroke="#786333" stroke-width="2"/>
+<rect x="1145" y="335" width="70" height="20" rx="2" fill="#cab16b" stroke="#786333" stroke-width="2"/>
+<rect x="1089" y="474" width="32" height="29" rx="4" fill="#edf7f2" stroke="#466f64"/>
+<circle cx="1105" cy="489" r="5" fill="#c77d32"/>
+<path d="M1105 494 V544" fill="none" stroke="#c77d32" stroke-width="5"/>
+<text x="800" y="292">Fixed bar 1</text><path d="M908 298 L1000 336" class="lead"/>
+<text x="1290" y="292">Fixed bar 2</text><path d="M1285 298 L1210 336" class="lead"/>
+<text x="786" y="431">Wire channels</text><path d="M924 425 L975 419" class="lead"/>
+<text x="1210" y="501">Recessed junction</text><path d="M1200 496 L1123 489" class="lead"/>
+<text x="1140" y="550">One cable to WE</text>
+<!-- lower panel -->
+<rect x="25" y="605" width="1450" height="365" rx="12" fill="white" stroke="#d4dfe7"/>
+<text x="50" y="645" class="head">3. Seated — copper ring rests directly on the supported bars</text>
+<!-- cell cap -->
+<path d="M140 890 H370 V930 H140 Z M410 890 H640 V930 H410 Z" fill="#cedbe5" stroke="#546679" stroke-width="2"/>
+<!-- cup-shaped insert -->
+<path d="M220 750 H275 V840 H370 V890 H220 Z M410 840 H505 V750 H560 V890 H410 Z" fill="#9bcfbe" stroke="#466f64" stroke-width="2"/>
+<!-- holder flange deliberately above insert rim -->
+<path d="M245 690 H535 V730 H490 V830 H290 V730 H245 Z" fill="#b5a5d5" stroke="#546679" stroke-width="2"/>
+<rect x="375" y="690" width="30" height="255" fill="#415361"/>
+<!-- ring and metal bars shown touching -->
+<path d="M290 830 H375 M405 830 H490" stroke="#c77d32" stroke-width="6"/>
+<rect x="290" y="833" width="75" height="7" fill="#cab16b" stroke="#786333"/>
+<rect x="415" y="833" width="75" height="7" fill="#cab16b" stroke="#786333"/>
+<text x="580" y="751">Clearance</text><path d="M575 757 L520 742" class="lead"/>
+<text x="580" y="781" class="small">Flange stays above rim</text>
+<text x="578" y="862">Insert</text><path d="M570 857 H549" class="lead"/>
+<text x="578" y="918">Cell cap</text>
+<text x="840" y="707" class="head">Details to preserve in CAD</text>
+<text x="840" y="750">• Ring reaches bars before any plastic stop.</text>
+<text x="840" y="789">• Two symmetric wire paths join at one point.</text>
+<text x="840" y="828">• Joint and wires sit below contact surfaces.</text>
+<text x="840" y="867">• Centre opening remains clear for the electrode.</text>
+<text x="840" y="906">• Cable exit includes strain relief.</text>
+<text x="35" y="1016">Fixed contacts: no spring preload. Flatness, seating, dry-zone clearance and repeatable continuity still need a physical trial.</text>
+</svg>'''
+svg_path = folder / 'fixed-contact-concept.svg'
+svg_path.write_text(svg, encoding='utf-8')
+app = QApplication.instance() or QApplication([])
+renderer = QSvgRenderer(str(svg_path))
+image = QImage(1500, 1060, QImage.Format_ARGB32)
+image.fill(QColor('white'))
+painter = QPainter(image)
+renderer.render(painter)
+painter.end()
+image.save(str(folder / 'fixed-contact-concept.png'))

@@ -1,0 +1,720 @@
+{
+  "design": "robot-cell-cap-v1",
+  "geometry_id": "ecde483a7d172dc3",
+  "units": "mm",
+  "dimensions": {
+    "flange_diameter": 55.0,
+    "base_plate_thickness": 5.0,
+    "deck_thickness": 6.0,
+    "cell_thread_nominal_diameter": 43.0,
+    "cell_thread_diametral_allowance": 0.3,
+    "cell_thread_pitch": 2.0,
+    "cell_thread_depth": 0.8,
+    "cell_thread_length": 10.0,
+    "thread_lead_length": 1.0,
+    "we_xy": [
+      9.0,
+      0.0
+    ],
+    "we_socket_diameter": 34.4,
+    "we_pedestal_diameter": 37.0,
+    "we_socket_rise": 13.3,
+    "we_through_bore": 8.6,
+    "we_cable_slot_width": 4.0,
+    "we_cable_slot_bottom": 6.3,
+    "compact_insert_flange_diameter": 36.0,
+    "fixed_electrode_xy": [
+      [
+        -11.5,
+        9.0
+      ],
+      [
+        -11.5,
+        -9.0
+      ]
+    ],
+    "fixed_electrode_through_bore": 7.2,
+    "fixed_fitting_access_diameter": 13.0,
+    "fixed_fitting_head_envelope_diameter": 11.0,
+    "fixed_fitting_head_height": 5.5,
+    "fixed_thread_nominal_diameter": 9.0,
+    "fixed_thread_diametral_allowance": 0.4,
+    "fixed_thread_pitch": 1.6666666666666667,
+    "fixed_thread_depth": 0.5,
+    "fixed_thread_engagement": 10.5,
+    "gas_xy": [
+      [
+        -5.5,
+        16.0
+      ],
+      [
+        -5.5,
+        -16.0
+      ]
+    ],
+    "gas_bore": 4.0,
+    "mount_bolt_xy": [
+      [
+        -24.0,
+        0.0
+      ],
+      [
+        0.0,
+        24.0
+      ],
+      [
+        0.0,
+        -24.0
+      ]
+    ],
+    "mount_hole": 3.4,
+    "mount_nut_af": 5.8,
+    "mount_nut_depth": 2.6,
+    "mount_blind_depth": 4.0,
+    "printer_bed": [
+      220.0,
+      220.0
+    ],
+    "printer_height": 250.0,
+    "provenance": "User-estimated 55 mm main flange, 43 mm external cell thread and 2 mm pitch. Black fitting opening 7 mm is user-confirmed; its 9 mm thread and six layers per cm are estimates. Right-handed truncated helical thread forms, engagement lengths, printed allowances, gas bores and all port coordinates are provisional. Fit gauges must establish compatibility; no measured glass bore, gasket profile, cell depth, liquid level or gripper envelope is available."
+  },
+  "contact_dimensions": {
+    "electrode_diameter": 6.0,
+    "electrode_length_estimate": 60.0,
+    "holder_bore": 6.1,
+    "holder_height": 24.0,
+    "holder_lower_diameter": 18.0,
+    "holder_lower_height": 10.0,
+    "holder_grip_diameter": 22.0,
+    "holder_flange_diameter": 26.0,
+    "holder_flange_height": 3.0,
+    "split_gap": 0.4,
+    "bolt_x": 6.3,
+    "bolt_z": 18.5,
+    "bolt_hole": 3.4,
+    "bolt_flat_y": 5.0,
+    "nut_af": 5.8,
+    "nut_depth": 3.0,
+    "washer_id": 8.0,
+    "washer_od": 14.0,
+    "washer_thickness": 1.0,
+    "holder_wire_y": -5.5,
+    "wire_hole": 1.8,
+    "wire_max_od": 1.4,
+    "insert_id": 18.6,
+    "insert_od": 34.0,
+    "insert_height": 13.6,
+    "insert_floor": 4.0,
+    "insert_flange_od": 36.0,
+    "insert_flange_height": 2.0,
+    "insert_through_hole": 8.0,
+    "bar_length": 10.0,
+    "bar_width": 5.0,
+    "bar_thickness": 1.0,
+    "bar_inner_x": 4.5,
+    "bar_slot_clearance": 0.3,
+    "bar_seat_depth": 0.6,
+    "wire_route_radius": 12.5,
+    "wire_groove_width": 2.0,
+    "wire_groove_depth": 1.8,
+    "cover_thickness": 1.2,
+    "stand_height": 60.0,
+    "stand_od": 60.0,
+    "stand_socket_diameter": 34.4,
+    "stand_top_thickness": 4.0,
+    "stand_leg_diameter": 8.0,
+    "stand_leg_radius": 24.0,
+    "printer_bed": [
+      220.0,
+      220.0
+    ],
+    "printer_height": 250.0,
+    "provenance": "6 mm electrode diameter confirmed. 60 mm body length is a photo estimate. All manufactured dimensions are provisional dry-fit values. Washer is nominal 8 x 14 x 1 mm copper; bars are cut from 1 mm copper sheet. Wire insulation OD, not AWG, determines fit. No cell-cap dimensions or wet sealing interface are assumed."
+  },
+  "source_sha256": "0bbd66ba7943de0d716c2a01765a433f25e6537d29f0dce08b637d59c07ba408",
+  "dependency_sha256": {
+    "fixed_contact_cad.py": "184a170bba138010c2c1d630676385fce4178aed537b8eeb747bd9ab71c63762",
+    "electrode_holder.py": "cff5ab36bf398c3f5285f21e254a6dcf8f2f76d27294b4d576a687eb564d759a"
+  },
+  "parts": [
+    {
+      "file": "upper_deck.stl",
+      "quantity": 1,
+      "size_mm": [
+        55.0,
+        55.0,
+        19.299999237060547
+      ],
+      "volume_mm3": 13839.450093701293,
+      "connected_solids": 1,
+      "watertight": true,
+      "assembly_to_print": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          27.5
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          27.5
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "plate_translation_mm": [
+        5.0,
+        5.0,
+        0
+      ]
+    },
+    {
+      "file": "threaded_base.stl",
+      "quantity": 1,
+      "size_mm": [
+        55.0,
+        55.0,
+        15.000000000000005
+      ],
+      "volume_mm3": 22455.65089016542,
+      "connected_solids": 1,
+      "watertight": true,
+      "assembly_to_print": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          27.5
+        ],
+        [
+          0.0,
+          -1.0,
+          -1.2246467991473532e-16,
+          27.5
+        ],
+        [
+          0.0,
+          1.2246467991473532e-16,
+          -1.0,
+          3.3677786976552213e-15
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "plate_translation_mm": [
+        65.0,
+        5.0,
+        0
+      ]
+    },
+    {
+      "file": "compact_contact_insert.stl",
+      "quantity": 1,
+      "size_mm": [
+        36.0,
+        36.0,
+        13.600000381469727
+      ],
+      "volume_mm3": 8894.787759039946,
+      "connected_solids": 1,
+      "watertight": true,
+      "assembly_to_print": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          18.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          18.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "plate_translation_mm": [
+        125.0,
+        5.0,
+        0
+      ]
+    },
+    {
+      "file": "wire_cover.stl",
+      "quantity": 1,
+      "size_mm": [
+        34.0,
+        33.92537307739258,
+        1.2000000476837158
+      ],
+      "volume_mm3": 1010.5514345605924,
+      "connected_solids": 1,
+      "watertight": true,
+      "assembly_to_print": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          17.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          16.925373077392578
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "plate_translation_mm": [
+        166.0,
+        5.0,
+        0
+      ]
+    },
+    {
+      "file": "holder_rear.stl",
+      "quantity": 1,
+      "size_mm": [
+        25.986906051635742,
+        24.0,
+        12.799999997019768
+      ],
+      "volume_mm3": 3240.3781101229815,
+      "connected_solids": 1,
+      "watertight": true,
+      "assembly_to_print": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          12.993453025817871
+        ],
+        [
+          0.0,
+          6.123233995736766e-17,
+          1.0,
+          5.51091059616309e-16
+        ],
+        [
+          0.0,
+          -1.0,
+          6.123233995736766e-17,
+          -0.20000000298023224
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "plate_translation_mm": [
+        5.0,
+        65.0,
+        0
+      ]
+    },
+    {
+      "file": "holder_front.stl",
+      "quantity": 1,
+      "size_mm": [
+        25.986906051635742,
+        24.0,
+        12.799999997019768
+      ],
+      "volume_mm3": 3185.819838115738,
+      "connected_solids": 1,
+      "watertight": true,
+      "assembly_to_print": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          12.993453025817871
+        ],
+        [
+          0.0,
+          6.123233995736766e-17,
+          -1.0,
+          24.0
+        ],
+        [
+          0.0,
+          1.0,
+          6.123233995736766e-17,
+          -0.20000000298023224
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "plate_translation_mm": [
+        35.98690605163574,
+        65.0,
+        0
+      ]
+    },
+    {
+      "file": "glass_thread_gauge_D42.3_P2.stl",
+      "quantity": 1,
+      "size_mm": [
+        54.9754,
+        55.0,
+        12.0
+      ],
+      "volume_mm3": 6047.2296813666135,
+      "connected_solids": 1,
+      "watertight": true,
+      "assembly_to_print": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          27.5
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          27.5
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          2.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "plate_translation_mm": [
+        66.97381210327148,
+        65.0,
+        0
+      ]
+    },
+    {
+      "file": "glass_thread_gauge_D42.7_P2.stl",
+      "quantity": 1,
+      "size_mm": [
+        55.0,
+        55.0,
+        12.0
+      ],
+      "volume_mm3": 6301.507434737057,
+      "connected_solids": 1,
+      "watertight": true,
+      "assembly_to_print": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          27.5
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          27.5
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          2.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "plate_translation_mm": [
+        126.94921210327149,
+        65.0,
+        0
+      ]
+    },
+    {
+      "file": "glass_thread_gauge_D43_P2.stl",
+      "quantity": 1,
+      "size_mm": [
+        54.9754,
+        55.0,
+        12.0
+      ],
+      "volume_mm3": 6492.012713873123,
+      "connected_solids": 1,
+      "watertight": true,
+      "assembly_to_print": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          27.5
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          27.5
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          2.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "plate_translation_mm": [
+        5.0,
+        125.0,
+        0
+      ]
+    },
+    {
+      "file": "fitting_thread_gauge_P1.500.stl",
+      "quantity": 1,
+      "size_mm": [
+        16.0,
+        16.0,
+        8.0
+      ],
+      "volume_mm3": 1104.4864901566798,
+      "connected_solids": 1,
+      "watertight": true,
+      "assembly_to_print": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          8.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          8.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "plate_translation_mm": [
+        64.97540000000001,
+        125.0,
+        0
+      ]
+    },
+    {
+      "file": "fitting_thread_gauge_P1.667.stl",
+      "quantity": 1,
+      "size_mm": [
+        16.0,
+        16.0,
+        8.0
+      ],
+      "volume_mm3": 1100.4673853524348,
+      "connected_solids": 1,
+      "watertight": true,
+      "assembly_to_print": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          8.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          8.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "plate_translation_mm": [
+        85.97540000000001,
+        125.0,
+        0
+      ]
+    },
+    {
+      "file": "fitting_thread_gauge_P2.000.stl",
+      "quantity": 1,
+      "size_mm": [
+        16.0,
+        16.0,
+        8.0
+      ],
+      "volume_mm3": 1096.4438122303357,
+      "connected_solids": 1,
+      "watertight": true,
+      "assembly_to_print": [
+        [
+          1.0,
+          0.0,
+          0.0,
+          8.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0,
+          8.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0,
+          -0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "plate_translation_mm": [
+        106.97540000000001,
+        125.0,
+        0
+      ]
+    }
+  ],
+  "interfaces": {
+    "socket_seat_z_mm": 19.3,
+    "insert_origin_z_mm": 7.700000000000001,
+    "cover_bottom_z_mm": 6.500000000000001,
+    "cover_to_deck_gap_mm": 0.5000000000000009,
+    "holder_origin_z_mm": 13.100000000000001,
+    "electrode_body_top_z_mm": 37.1,
+    "estimated_we_tip_z_mm": -22.9,
+    "glass_gasket_land_z_mm": -5.0,
+    "cell_thread_tip_z_mm": -15.0
+  },
+  "plate_bounds_mm": [
+    [
+      5.0,
+      5.0,
+      0.0
+    ],
+    [
+      200.0,
+      180.0,
+      19.299999237060547
+    ]
+  ],
+  "plate_solids": 12,
+  "assembly_frame": "Z=0 upper-deck underside / threaded-base top. Glass gasket land at Z=-base_plate_thickness. +Z toward robot. XY coordinates local to cap, not robot.",
+  "assembly_translations_mm": {
+    "upper_deck": [
+      0,
+      0,
+      0
+    ],
+    "threaded_base": [
+      0,
+      0,
+      0
+    ],
+    "compact_contact_insert": [
+      9.0,
+      0.0,
+      7.700000000000001
+    ],
+    "wire_cover": [
+      9.0,
+      0.0,
+      6.500000000000001
+    ],
+    "holder_rear": [
+      9.0,
+      0.0,
+      13.100000000000001
+    ],
+    "holder_front": [
+      9.0,
+      0.0,
+      13.100000000000001
+    ]
+  },
+  "warnings": [
+    "Both OEM mating thread forms are provisional. Fit gauges first; do not force printed parts into glass.",
+    "Plain annular gasket land; original gasket dimensions and compression are not verified.",
+    "RE/CE fitting heads must fit inside 13 mm access wells and stay below Z=5.5 mm.",
+    "No electrolyte/temperature compatibility, gas tightness, immersion depth or gripper clearance has been established."
+  ]
+}

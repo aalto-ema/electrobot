@@ -1,0 +1,161 @@
+{
+  "evidence_date": "2026-10-23",
+  "method": "Manual pixel landmarks and ruler calibration in near-top photographs. No perspective/parallax correction is possible from one ruler plane. All image-derived sizes are approximate, not measured manufacturing dimensions.",
+  "sources": [
+    {
+      "file": "1000006693.jpg",
+      "view": "top face",
+      "ruler_mm": [
+        0,
+        10,
+        20,
+        30,
+        40,
+        50,
+        60,
+        70,
+        80,
+        90,
+        100
+      ],
+      "ruler_y_px": [
+        1168,
+        1064,
+        958,
+        852,
+        746,
+        639,
+        533,
+        425,
+        317,
+        207,
+        97
+      ],
+      "outer_bounds_px": [
+        18,
+        377,
+        697,
+        1062
+      ],
+      "large_hole_centres_px": [
+        [
+          317,
+          591
+        ],
+        [
+          274,
+          813
+        ],
+        [
+          479,
+          733
+        ]
+      ],
+      "gas_hole_centres_px": [
+        [
+          493,
+          555
+        ],
+        [
+          419,
+          908
+        ]
+      ],
+      "fitted_px_per_mm": 10.7027,
+      "estimated_outer_width_height_mm": [
+        63.4,
+        64.0
+      ],
+      "ruler_fit_rms_px": 2.5
+    },
+    {
+      "file": "1000006692.jpg",
+      "view": "gasket / underside",
+      "ruler_mm": [
+        0,
+        10,
+        20,
+        30,
+        40,
+        50,
+        60,
+        70,
+        80,
+        90,
+        100
+      ],
+      "ruler_y_px": [
+        1196,
+        1091,
+        982,
+        872,
+        767,
+        660,
+        552,
+        449,
+        343,
+        238,
+        129
+      ],
+      "outer_bounds_px": [
+        64,
+        407,
+        713,
+        1060
+      ],
+      "gasket_outer_bounds_px": [
+        82,
+        433,
+        693,
+        1033
+      ],
+      "large_hole_centres_px": [
+        [
+          256,
+          717
+        ],
+        [
+          463,
+          620
+        ],
+        [
+          448,
+          845
+        ]
+      ],
+      "gas_hole_centres_px": [
+        [
+          285,
+          540
+        ],
+        [
+          276,
+          908
+        ]
+      ],
+      "fitted_px_per_mm": 10.6591,
+      "estimated_outer_width_height_mm": [
+        60.9,
+        61.3
+      ],
+      "ruler_fit_rms_px": 1.95
+    }
+  ],
+  "interpretation": {
+    "outer_cap_diameter_range_mm": [
+      61,
+      64
+    ],
+    "selected_top_plate_diameter_mm": 55.0,
+    "gas_bore_trial_diameter_mm": 4.0,
+    "electrode_fitting_opening_mm": 7.0,
+    "electrode_fitting_opening_evidence": "Confirmed by user on 2026-10-23",
+    "black_fitting_thread_major_estimate_mm": 9.0,
+    "black_fitting_pitch_evidence": "User estimates six layers per centimetre; exact number of crest-to-crest intervals and thread profile remain unresolved.",
+    "cell_mount": "User confirms cap itself screws into the glass cell; cap thread diameter/pitch/profile remain unmeasured.",
+    "selected_top_plate_evidence": "User estimates the larger cap part as about 55 mm; this overrides image-derived apparent diameters affected by parallax.",
+    "cell_thread_major_mm": 43.0,
+    "cell_thread_pitch_mm": 2.0,
+    "cell_thread_evidence": "User estimates diameter 4.3 cm and adjacent-crest spacing 2 mm. Handedness and exact profile remain unconfirmed."
+  }
+}

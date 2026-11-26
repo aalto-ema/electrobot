@@ -12,6 +12,7 @@ class DeviceWorker(QThread):
     point=Signal(int,float,float,float); result=Signal(str,str)
     completed=Signal(str,bool,str)
     workspace_sample=Signal(dict)
+    layout_event=Signal(dict)
     def __init__(self,output):
         super().__init__(); self.output=Path(output); self.commands=queue.Queue()
         self.control=Control(); self.robot=None; self.pot=None
@@ -66,7 +67,7 @@ class DeviceWorker(QThread):
                 self.publish(); return
             ok=True; message=''
             try:
-                if command not in ('rehearsal_pose','workspace_scan'): s.validate()
+                if command not in ('rehearsal_pose','workspace_scan','plan_layout','layout_pose'): s.validate()
                 self.setup(s,control); control.check()
                 if command=='configure':
                     if self.robot_connected: self.robot.pose()
@@ -99,6 +100,22 @@ class DeviceWorker(QThread):
                         pose=self.robot.pose()
                         self.robot.preflight_route(s.planned_route(tuple(pose[k] for k in ('x','y','z','r'))))
                     elif command=='clear_alarms': self.robot.clear_alarms()
+                    elif command=='layout_pose':
+                        pose=self.robot.pose()
+                        self.layout_event.emit({'kind':'pose','role':payload,'pose':pose})
+                    elif command=='plan_layout':
+                        if self.mode!='hardware' or not self.robot.homed:
+                            raise ValueError('Layout planning needs a connected, homed Hardware robot')
+                        if self.robot.holding: raise ValueError('Secure/release the held electrode before planning a layout')
+                        from .config import Settings
+                        from .layout_planner import LayoutPlanner
+                        proposed=Settings(**payload['settings'])
+                        self.robot.check_alarms()
+                        pose=self.robot.pose()
+                        planner=LayoutPlanner(proposed,self.robot.controller_limited,control.check,
+                            lambda text:self.layout_event.emit({'kind':'progress','text':text}))
+                        result=planner.find(tuple(pose[k] for k in ('x','y','z','r')),payload['count'],payload['spacing'])
+                        self.layout_event.emit({'kind':'result','settings':asdict(result)})
                     elif command=='workspace_scan':
                         if self.mode!='hardware' or not self.robot.homed:
                             raise ValueError('Workspace mapping needs a connected, homed Hardware robot')
@@ -124,7 +141,7 @@ class DeviceWorker(QThread):
                     if command!='stop': self.robot.pose()
             except Cancelled:
                 ok=False; message='Stopped'
-                if self.robot_connected and command!='workspace_scan':
+                if self.robot_connected and command not in ('workspace_scan','plan_layout','layout_pose'):
                     try: self.robot.stop()
                     except Exception as exc: message+=f'; stop failed: {exc}'
             except Exception as exc:

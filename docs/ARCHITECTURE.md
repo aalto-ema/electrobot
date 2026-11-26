@@ -14,6 +14,7 @@ This document maps implementation responsibilities. User setup and operation bel
 | `engine.py` | Experiment/rehearsal sequencing, cancellable waits, simulation adapters and run output |
 | `drivers.py` | Lazy Dobot/PalmSens adapters, queue/pose checks, SDK method mapping, units and cleanup |
 | `workspace_map.py` / `workspace_explorer.py` | Bounded XYZ grid plans, saved-map validation and native read-only reach explorer |
+| `layout_planner.py` / `layout_wizard.py` | Bounded controller-only rack fitting, transfer graph, guided teaching and preview/apply |
 | `robot_checks.py` | Sampled non-moving route checks and DobotLink alarm-byte decoding |
 | `camera.py` | Independent OpenCV capture worker and camera discovery |
 | `widgets.py` | Shared styling, controls, CV plot, camera preview and cap sketch |
@@ -57,6 +58,18 @@ During motion, alarm reads accompany pose/queue polling. DobotLink's `state` arr
 Hardware run folders include `robot-diagnostics.json` with the retained diagnostic state, including faults from preflight before handling. Manual-only failures remain in Activity and the copyable dialog.
 
 Protocol basis, inspected 2026-10-14: [DobotLink pose/alarm encoders and decoders](https://github.com/Dobot-Arm/DobotLink/blob/main/Plugins/MagicDevicePlugin/Protocol2/DMagicianProtocol.cpp), [Magician Lite virtual-controller alarm definitions](https://github.com/Dobot-Arm/DobotLink/blob/main/Plugins/MagicDevicePlugin/magicianlite_virtual/src/algorithm/alarms.h). Actual lab firmware support/response behavior remains to be commissioned. Generic numeric IDs and raw responses remain available even when labels are incomplete.
+
+## Controller-guided layout and transfer planning
+
+`LayoutPlanner` accepts a settings snapshot, `controller_limited` callback, cancellation callback and progress callback. `DeviceWorker` owns `plan_layout` and `layout_pose`; only the worker reads/query devices. These commands send no movement/gripper commands. Cancellation is handled like workspace scanning: no queue stop/clear and no loss of homing merely for cancelling the read-only search. Unsupported/malformed queries abort without publishing a proposal. Live alarms still prevent planning.
+
+The planner first checks cell/rinse vertical strokes and the current-pose lift. It builds a polar graph at the fixed Travel Z / tool R, checking every neighbour segment with `segment_samples`. Stations connect through checked segments; disconnected components are rejected. Rack candidates must have accepted pickup-to-travel strokes, lie in the connected component, respect selected carrier spacing and avoid approximate beaker footprints. It searches regular radial layouts (120–340 mm / 20 mm, −90…90° / 5°, up to four rows), then validates exact `rack_pose()` coordinates and the final complete handling route. Results include requested count, best sampled regular-rack capacity, query count, source and timestamp. The 16,000-query bound is a resource limit, not a reach limit. A smaller proposal requires explicit review/apply; no settings are changed by a failed/cancelled search.
+
+`Settings.transfer_plan` defaults to an empty dictionary. Its versioned JSON stores finite fixed-Z/R graph nodes, validated index edges and a signature of geometry/route fields and the number of planned rack slots. `validate_plan()` bounds the loaded structure; it does not authenticate historical controller evidence. `signature()` excludes acquisition/device parameters but covers slot geometry, station heights/positions, bounds, sample spacing and rotation. `calibration_issues()` marks stale plans; route resolution rejects them rather than falling back. Subsets of the planned rack and protocol/rinse timing changes can reuse a plan; slot ranges beyond its stored capacity cannot. Preset actions clear old plans explicitly. Applying or removing a plan clears readiness.
+
+`Settings.travel_steps()` is the shared route contract: lift at the current XY, follow shortest paths in the saved checked graph, then lower at the target. `planned_route()` and `Experiment.travel()` both consume it, so route preflight and execution cannot diverge into straight chords. Without a plan they preserve the previous straight transfer behavior. A current XY must match a graph node within the configured position tolerance; small feedback offsets are included in live preflight. A new initial pose outside the graph requires replanning. Hardware still performs whole-sequence preflight before gripping and per-move checks; no automatic error-recovery movement was added.
+
+The native wizard keeps teaching edits while hidden for manual jogging, captures fresh poses via the worker, shows progress and a network/route preview, and applies only after review. A main-settings signature prevents applying a result to changed geometry; unrelated acquisition/device choices are preserved. Manual moves do not use the saved experiment route. Simulation may replay saved routes but cannot manufacture a controller-approved search result.
 
 ## CAD and exports
 

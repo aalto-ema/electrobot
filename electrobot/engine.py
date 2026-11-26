@@ -107,8 +107,8 @@ class Experiment:
         def travel(x,y,z):
             # Raise at the current station before crossing to another station.
             current=robot.pose()
-            robot.move((current['x'],current['y'],s.safe_z))
-            robot.move((x,y,s.safe_z)); robot.move((x,y,z))
+            for _,pose in s.travel_steps(tuple(current[k] for k in ('x','y','z','r')),(x,y,z)):
+                robot.move(pose)
         def lift(x,y): robot.move((x,y,s.safe_z))
         try:
             if pot is not None: pot.cell_off()

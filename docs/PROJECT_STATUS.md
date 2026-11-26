@@ -125,3 +125,13 @@ Implemented an off-by-default, persisted workspace-enforcement switch. Older pro
 Added a non-moving 32-slot preset in Robot calibration and a loadable example JSON: two radial rows of 16 at 210/250 mm, 10° spacing from −75° to +75°; cell (140, −70, 0), rinse (140, 70, 0), rack Z 0 and Travel Z 40 mm. These are provisional tool coordinates, not validated fixture heights or controller reach. UI application preserves hardware/acquisition/manufacturing settings and clears readiness. No physical robot testing was performed.
 
 Verification: 61 unit tests and both offscreen UI checks passed using simulation/mocked devices, including movement beyond disabled bounds, retained controller rejection, optional-bound persistence, old-profile defaults and non-moving 32-slot preset application. Normal and compact UI screenshots were reviewed.
+
+## Guided layout planning — 2026-11-26
+
+The user reported controller rejection of the provisional 32-slot route at XYZ/R (176.7, −32.46, 40, 0). It is a rejected sampled pose, not proof of a particular joint limit or an absolute reach envelope. They requested implementation of automatic layout fitting and transfer routing to reduce manual coordinate trial and error.
+
+Implemented Find a working layout in Manual robot and Robot calibration: fresh teaching of rack Z, cell/rinse XYZ and clearance Z; requested electrode count/minimum spacing; controller-only bounded radial search; checked intermediate transfer segments; preview and explicit apply. Cell/rinse positions and taught heights are preserved. Rejected vertical strokes and disconnected route networks have specific feedback. Smaller proposals report best capacity in the sampled regular-layout search, not global robot capacity. Failed/cancelled/unsupported searches do not apply a partial layout or change homing merely because of cancellation.
+
+Saved transfer graphs are consumed by both route preflight and experiment/rehearsal execution. Editing relevant settings makes them stale; there is no silent fallback to a rejected straight chord. Current poses outside the saved network require replanning. Physical fixture, cable and electrode clearance still requires commissioning; approximate footprint checks are not a collision model. No physical robot testing was performed.
+
+Verification: 69 unit tests and three offscreen UI checks cover rejected straight chords with accepted waypoint alternatives, vertical-interior limits, bounded capacity, stale/out-of-coverage plans, subset rehearsal, exact preflight/execution sequence agreement, fresh teaching, preview/apply/persistence, unsupported firmware and read-only cancellation. Normal and compact wizard screenshots reviewed; all devices were simulated or mocked.

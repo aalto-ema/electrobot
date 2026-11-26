@@ -30,6 +30,7 @@
 ## Settings, coordinates and data
 
 - `Settings` is the source of truth. Add backwards-compatible defaults for new fields; connect UI read/apply, validation and readiness invalidation as appropriate.
+- Use `Settings.travel_steps()` for both route preflight and execution. Saved transfer plans must not silently fall back to straight chords when stale, disconnected or out of coverage; require replanning or explicit removal. Layout planning is controller-query-only and must preserve taught clearance heights.
 - Use `Settings.rack_pose()` and `rack_export_positions()` for movement, diagrams, CAD and placement guides. Do not create a second slot-mapping formula in the UI or exports.
 - Lengths are mm; tool R and rack angles are degrees; voltages are V; exported current is µA. Distinguish measured hardware data from synthetic data.
 - Robot Z is the reported tool coordinate. Printed seat height and electrode tip depth are different physical quantities; do not infer or overwrite taught Z from CAD.
@@ -47,7 +48,7 @@
 
 ## Verification and delivery
 
-- Preferred command: `python scripts/check_project.py`. It uses `.venv` when available and runs unit tests plus both offscreen UI checks. `--unit-only` runs just the unit suite.
+- Preferred command: `python scripts/check_project.py`. It uses `.venv` when available and runs unit tests plus the offscreen UI checks. `--unit-only` runs just the unit suite.
 - Choose checks appropriate to the change. UI changes need a screenshot review at the normal window size and the compact size where relevant; CAD changes need mesh, dimension, assembly/interface and export checks. Documentation-only edits need link/command consistency checks, not a full test rerun.
 - UI tests use temporary settings/output directories and mock hardware. They refresh tracked screenshots under `cad/`; inspect changed screenshots and avoid committing unrelated image churn.
 - Run `git diff --check`, review the diff and check the worktree before delivery. Report what changed, what passed, and remaining physical assumptions.

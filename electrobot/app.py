@@ -22,7 +22,7 @@ class Window(QMainWindow):
     def __init__(self):
         super().__init__(); self.setWindowTitle('Electrobot · Electrochemistry Workbench')
         self.resize(1440,960); self.setMinimumSize(1120,760)
-        self.workspace_explorer=None; self.active_command=None
+        self.workspace_explorer=None; self.layout_wizard=None; self.active_command=None
         self.s=Settings(); self.fields={}; self.busy=False; self.running_batch=False
         self.paused=False; self.camera=None; self.last_frame=None; self.output=None
         self._close_pending=False; self._shutdown_sent=False; self.current_pose=None; self.robot_diagnostics={}
@@ -72,6 +72,7 @@ class Window(QMainWindow):
         self.worker=DeviceWorker(ROOT/'runs'); self.worker.state.connect(self.on_devices)
         self.worker.diagnostic.connect(self.on_diagnostic)
         self.worker.workspace_sample.connect(self.on_workspace_sample)
+        self.worker.layout_event.connect(self.on_layout_event)
         self.worker.pose.connect(self.on_pose); self.worker.event.connect(self.on_event)
         self.worker.point.connect(self.plot.add); self.worker.result.connect(self.on_result)
         self.worker.completed.connect(self.on_completed); self.worker.finished.connect(self.on_worker_finished); self.worker.start()
@@ -142,6 +143,8 @@ class Window(QMainWindow):
             self.robot_diagnostics['preflight']='Not checked for current settings'
             self.update_diagnostic_labels()
         self.update_map_feedback(s)
+        if hasattr(self,'plan_feedback'):
+            self.plan_feedback.setText(('Saved controller-sampled transfer network; rehearsal and experiments use its waypoints.' if s.transfer_plan else 'No transfer plan saved; transfers use straight lines.'))
         self.validation_issues=s.calibration_issues()
         try: s.validate()
         except ValueError as exc:
@@ -165,7 +168,7 @@ class Window(QMainWindow):
     def apply_compact_rehearsal(self,pose):
         if pose is None: return
         from dataclasses import replace
-        s=replace(self.read_settings(validate=False),run_name='Compact empty-gripper rehearsal',
+        s=replace(self.read_settings(validate=False),transfer_plan={},run_name='Compact empty-gripper rehearsal',
             first_electrode=1,electrodes=1,rack_layout='rectangular',rack_x=pose['x'],rack_y=pose['y'],rack_z=pose['z'],
             cell_x=pose['x']+10,cell_y=pose['y'],cell_z=pose['z'],
             rinse_x=pose['x']+10,rinse_y=pose['y']+10,rinse_z=pose['z'],
@@ -271,7 +274,7 @@ class Window(QMainWindow):
         actions=QHBoxLayout(); self.manual_buttons=[]; self.motion_buttons=[]
         for text,command in (('Read pose','pose'),('Home robot','home')):
             b=button(text,lambda checked=False,c=command:self.submit(c)); actions.addWidget(b); self.manual_buttons.append(b)
-        self.manual_stop=button('Stop robot',self.stop_run); self.manual_stop.setObjectName('danger'); actions.addWidget(self.manual_stop); actions.addWidget(button('Workspace explorer…',self.open_workspace_explorer)); actions.addStretch(); l.addLayout(actions)
+        self.manual_stop=button('Stop robot',self.stop_run); self.manual_stop.setObjectName('danger'); actions.addWidget(self.manual_stop); actions.addWidget(button('Workspace explorer…',self.open_workspace_explorer)); actions.addWidget(button('Find a working layout…',self.open_layout_wizard)); actions.addStretch(); l.addLayout(actions)
         self.pose_label=QLabel('X —    Y —    Z —    R —'); self.pose_label.setObjectName('metric'); l.addWidget(self.pose_label)
         self.manual_diagnostic=self.note('Robot checks: not yet run'); l.addWidget(self.manual_diagnostic)
         checks=QHBoxLayout()
@@ -327,6 +330,10 @@ class Window(QMainWindow):
         self.combo_field(f,'power_frequency','Mains frequency',[('50 Hz',50),('60 Hz',60)]); protocol.addWidget(acquisition)
         protocol.addWidget(self.note('Native PalmSens CV returns to its start potential. Hardware ignores the simulation multiplier. Current and potential values are recorded from SDK data; CSV time is nominal CV sample time.')); protocol.addStretch()
         robot,self.calibration_feedback,self.calibration_diagram,self.calibration_scroll=self.calibration_tab('Robot calibration')
+        robot.addWidget(button('Find a working layout…',self.open_layout_wizard,True))
+        self.plan_feedback=self.note('No transfer plan saved; transfers use straight lines.')
+        robot.addWidget(self.plan_feedback)
+        self.clear_plan_button=button('Remove transfer plan · use straight transfers',self.clear_transfer_plan); robot.addWidget(self.clear_plan_button)
         self.preset_button=button('Compact rehearsal from current pose',self.compact_rehearsal_preset,True); robot.addWidget(self.preset_button)
         robot.addWidget(self.note('Empty-gripper preset: read the live pose, use it as rack slot 1, offset cell +10 mm X and rinse +10 mm X/+10 mm Y, and set travel Z +5 mm. No movement is commanded. Readiness is cleared.'))
         self.screening_preset_button=button('Apply 32-electrode screening preset',self.apply_screening_preset)
@@ -408,10 +415,68 @@ class Window(QMainWindow):
 
     def submit(self,command,payload=None):
         if self.busy or self._close_pending: return
-        try: s=self.read_settings(validate=command not in ('rehearsal_pose','workspace_scan'))
+        try: s=self.read_settings(validate=command not in ('rehearsal_pose','workspace_scan','plan_layout','layout_pose'))
         except Exception as exc: QMessageBox.warning(self,'Check settings',str(exc)); return
         self.active_command=command; self.busy=True; self.refresh_controls(); self.statusBar().showMessage(command.replace('_',' ').capitalize()+'…')
         self.worker.submit(command,s,payload)
+    def open_layout_wizard(self):
+        if self.busy: return
+        from .layout_wizard import LayoutWizard
+        s=self.read_settings(validate=False)
+        if self.layout_wizard is None:
+            self.layout_wizard=LayoutWizard(self,s)
+            self.layout_wizard.search_requested.connect(self.start_layout_search)
+            self.layout_wizard.capture_requested.connect(lambda role:self.submit('layout_pose',role))
+            self.layout_wizard.cancel_requested.connect(self.cancel_layout_search)
+            self.layout_wizard.apply_requested.connect(self.apply_layout_plan)
+        self.layout_wizard.base=s
+        self.refresh_controls(); self.layout_wizard.show(); self.layout_wizard.raise_()
+
+    def start_layout_search(self,payload):
+        from dataclasses import replace
+        from .layout_planner import signature
+        current=self.read_settings(validate=False)
+        self.layout_source_signature=signature(current)
+        # Keep teaching edits, but take current protocol/device/manufacturing settings.
+        keys=('rack_z','cell_x','cell_y','cell_z','rinse_x','rinse_y','rinse_z','safe_z','tool_r')
+        payload['settings']=asdict(replace(current,transfer_plan={},**{k:payload['settings'][k] for k in keys}))
+        self.submit('plan_layout',payload)
+        if self.active_command!='plan_layout':
+            self.layout_wizard.busy=False; self.layout_wizard.searching=False; self.layout_wizard.update_buttons()
+
+    def cancel_layout_search(self):
+        if self.active_command=='plan_layout': self.worker.cancel()
+
+    def on_layout_event(self,event):
+        if self.layout_wizard: self.layout_wizard.event_received(event)
+
+    def apply_layout_plan(self,values):
+        if self.busy: return
+        from .layout_planner import signature
+        current=self.read_settings(validate=False)
+        if signature(current)!=getattr(self,'layout_source_signature',None):
+            self.layout_wizard.status.setText('Main settings changed since the search. Find a new layout before applying.'); return
+        s=Settings(**values)
+        # Acquisition and device choices may have changed since preview; preserve them.
+        route_keys=set(('transfer_plan','first_electrode','electrodes','rack_layout','rack_columns','rack_radius',
+            'rack_start_angle','rack_angle_step','rack_pitch','rack_z','cell_x','cell_y','cell_z',
+            'rinse_x','rinse_y','rinse_z','safe_z','tool_r','controller_preflight'))
+        merged=asdict(current); merged.update({k:v for k,v in asdict(s).items() if k in route_keys})
+        merged.update(calibrated=False,fixture_verified=False); s=Settings(**merged)
+        try:
+            s.validate()
+            if self.current_pose: s.planned_route(tuple(self.current_pose[k] for k in ('x','y','z','r')))
+        except ValueError as exc: self.layout_wizard.status.setText(str(exc)); return
+        self.apply_settings(s); self.layout_wizard.status.setText('Layout and routes applied without movement. Save configuration, verify physical clearance, then mark readiness and rehearse.')
+        self.layout_wizard.apply.setEnabled(False)
+        self.statusBar().showMessage('Controller-sampled layout applied; calibration and fixture readiness cleared.')
+
+    def clear_transfer_plan(self):
+        if self.busy: return
+        from dataclasses import replace
+        self.apply_settings(replace(self.read_settings(validate=False),transfer_plan={},calibrated=False,fixture_verified=False))
+        self.statusBar().showMessage('Transfer plan removed. Straight transfers restored; check the route before rehearsal.')
+
     def open_workspace_explorer(self):
         from .workspace_explorer import WorkspaceExplorer
         settings=self.read_settings(validate=False)
@@ -573,12 +638,14 @@ class Window(QMainWindow):
         for key in ('rack_x','rack_y'): self.fields[key].setEnabled(idle and not radial)
         self.placement_export.setEnabled(idle); self.rack_export.setEnabled(idle)
         self.lattice_preset.setEnabled(idle)
+        self.clear_plan_button.setEnabled(idle and bool(self.s.transfer_plan))
         self.screening_preset_button.setEnabled(idle and not d.get('holding',False))
         for key in ('workspace_x_min','workspace_x_max','workspace_y_min','workspace_y_max','workspace_z_min','workspace_z_max','workspace_radius_min','workspace_radius_max'):
             self.fields[key].setEnabled(idle and self.fields['workspace_enabled'].isChecked())
         self.update_map_feedback(self.read_settings(validate=False))
         can_check=idle and hardware and d.get('robot',False) and d.get('homed',False)
         if self.workspace_explorer: self.workspace_explorer.set_available(can_check)
+        if self.layout_wizard: self.layout_wizard.set_available(can_check and not d.get('holding',False),idle and d.get('robot',False),self.busy)
         self.route_check.setEnabled(can_check); self.manual_route_check.setEnabled(can_check)
         self.alarm_clear.setEnabled(idle and hardware and d.get('robot',False))
         lattice=self.fields['rack_design'].currentData()=='lattice'
@@ -626,6 +693,11 @@ class Window(QMainWindow):
     def on_completed(self,command,ok,message):
         if command=='shutdown': self.statusBar().showMessage(message); return
         self.busy=False; self.active_command=None
+        if command in ('plan_layout','layout_pose') and self.layout_wizard:
+            self.layout_wizard.busy=False; self.layout_wizard.searching=False
+            if not ok:
+                self.layout_wizard.proposal=None; self.layout_wizard.status.setText(message+' · no layout applied')
+            self.layout_wizard.update_buttons()
         if command=='workspace_scan' and self.workspace_explorer:
             self.workspace_explorer.scanning=False; self.workspace_explorer.update_buttons()
             if not ok: self.workspace_explorer.status.setText(message+' · unqueried points remain unknown')

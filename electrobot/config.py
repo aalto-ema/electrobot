@@ -12,6 +12,7 @@ def within_workspace(value,lower,upper):
 class Settings:
     workspace_map: dict = field(default_factory=dict)
     workspace_enabled: bool = False
+    transfer_plan: dict = field(default_factory=dict)
     mode: str = 'simulation'
     run_name: str = 'Electrode screening'
     first_electrode: int = 1
@@ -128,6 +129,8 @@ class Settings:
     reference_label: str = 'Ag/AgCl (confirm electrolyte)'
 
     def validate(self):
+        from .layout_planner import validate_plan
+        validate_plan(self.transfer_plan)
         if self.rack_design not in ('socket','lattice'): raise ValueError('Unknown rack design')
         if self.rack_layout not in ('rectangular','radial'): raise ValueError('Rack layout must be rectangular or radial')
         for key in ('rack_radius','rack_angle_step','rack_socket_clearance','rack_socket_depth','rack_post_height','rack_socket_wall','rack_base_thickness','rack_margin','rinse_beaker_diameter'):
@@ -279,11 +282,18 @@ class Settings:
             stages += [(f'WE {index} rinse {dip+1}',rinse) for dip in range(self.rinse_dips)]
             stages.append((f'WE {index} return',rack))
             for label,target in stages:
-                route.extend(((label+' lift',(current[0],current[1],self.safe_z,self.tool_r)),
-                              (label+' transfer',(target[0],target[1],self.safe_z,self.tool_r)),(label,target),
-                              (label+' exit',(target[0],target[1],self.safe_z,self.tool_r))))
+                route.extend((label+' '+stage,pose) for stage,pose in self.travel_steps(current,target))
+                route.append((label+' exit',(target[0],target[1],self.safe_z,self.tool_r)))
                 current=route[-1][1]
         return route
+
+    def travel_steps(self,current,target):
+        """Exactly the same lift/transfer/lower sequence for checks and execution."""
+        from .layout_planner import transfer_waypoints
+        points=transfer_waypoints(self,current,target)
+        return [('lift',(current[0],current[1],self.safe_z,self.tool_r)),
+                *[(f'transfer {i+1}',p) for i,p in enumerate(points)],
+                ('lower',(*target[:3],self.tool_r))]
 
     def rack_export_positions(self):
         # Complete rows through the last selected slot; inactive slots remain
@@ -309,6 +319,12 @@ class Settings:
     def calibration_issues(self):
         """All independent calibration problems, including in simulation."""
         issues=[]
+        if self.transfer_plan:
+            from .layout_planner import signature
+            if self.transfer_plan.get('signature')!=signature(self):
+                issues.append(((), 'Transfer plan is out of date. Find a working layout again or explicitly remove the plan.'))
+            elif self.first_electrode+self.electrodes-1>self.transfer_plan.get('slot_count',0):
+                issues.append((('electrodes','first_electrode'), 'Selected electrodes extend beyond the planned rack. Find a working layout again.'))
         def add(keys,message): issues.append((keys,message))
         if self.workspace_enabled:
             for axis in 'xyz':
@@ -345,7 +361,7 @@ class Settings:
     def screening_preset(self):
         """Provisional 32-slot layout; preserve devices, protocol and manufacturing settings."""
         from dataclasses import replace
-        return replace(self,run_name='32-electrode screening',first_electrode=1,electrodes=32,
+        return replace(self,transfer_plan={},run_name='32-electrode screening',first_electrode=1,electrodes=32,
             rack_layout='radial',rack_columns=16,rack_radius=210.0,rack_start_angle=-75.0,
             rack_angle_step=10.0,rack_pitch=40.0,rack_z=0.0,safe_z=40.0,
             cell_x=140.0,cell_y=-70.0,cell_z=0.0,

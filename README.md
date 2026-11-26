@@ -76,6 +76,22 @@ Use **Settings → Robot calibration → Apply 32-electrode screening preset**, 
 
 The UI preset preserves device connections, acquisition parameters and manufacturing dimensions, turns application bounds off, and clears calibration/fixture readiness. It sends no motion and does not overwrite a saved profile until you save. The downloadable JSON is a complete example with default device/protocol/manufacturing settings. The original small startup layout remains available; existing saved coordinates are not replaced automatically. Teach actual gripping, seating, dipping and travel heights, and check the complete controller route and physical fixture clearance before use. Larger custom holders may require increased slot spacing.
 
+## Find a controller-accepted layout
+
+Open **Manual robot → Find a working layout…** or the same button in **Settings → Robot calibration**. This replaces coordinate guessing with a guided, read-only controller search:
+
+1. Connect and explicitly home in Hardware. In the wizard, use **Go to Manual robot** to jog to each fixture, reopen the wizard, and capture rack pickup Z, cell XYZ, rinse XYZ and clearance/Travel Z from fresh feedback. Previously taught values can also be entered. Confirm that the clearance height clears the fixtures with the electrode attached. The common tool R is entered separately.
+2. Choose the electrode count (for example 32) and minimum spacing. Click **Find layout · no movement**. The taught cell/rinse positions and all four heights remain fixed. No movement or gripper commands are sent.
+3. Review the proposed radial rack and green transfer routes. Confirm the review, then **Apply layout and routes** and **Save configuration**. Application clears calibration/fixture readiness. Verify the physical layout and mark readiness before rehearsal.
+
+The search samples radii 120–340 mm at 20 mm intervals and angles −90° to +90° at 5° intervals, with up to four regular rack rows. It respects enabled application bounds, carrier spacing and approximate beaker/holder footprints. Every graph edge and vertical stroke is checked using the controller at the configured route sample spacing. A rejected straight chord can therefore be replaced by accepted intermediate segments around the base. Query errors/unsupported firmware abort; cancellation leaves the existing profile unchanged and does not stop/clear an otherwise idle robot. The search has a 16,000-query ceiling.
+
+If the requested count does not fit, the wizard previews the best smaller regular rack found in that sampled search; it does not claim the robot's absolute maximum capacity. If a taught cell/rinse vertical stroke or the initial lift is rejected, it names that stage and rejected XYZ/R. Teach another position or clearance height and search again: the wizard never lowers the taught clearance automatically. Disconnected sampled regions are reported explicitly.
+
+Applied profiles store the transfer network and its settings signature. **Check planned route**, **Rehearse** and experiments use the same lift/waypoint/lower sequence. Hardware rechecks the actual planned route before handling and each movement segment against current controller feedback. Geometry/route-setting changes mark the plan stale and prevent using it; rerun the wizard or explicitly **Remove transfer plan · use straight transfers**. Moving the robot away from the saved network also requires replanning. You can rehearse a smaller subset of the planned rack or change the measurement/rinse protocol without repeating the layout search. Selecting slots beyond the planned rack requires a new plan. Manual jog/absolute targets remain direct commands; they do not use the experiment transfer network.
+
+Controller acceptance at samples is not continuous-path, obstacle, cable or swept-gripper clearance. No hardware fit or physical route is certified by the wizard. Simulation does not invent controller reach; it can replay a saved plan as simulated movement.
+
 ## Manual robot
 
 Use **Manual robot** to read the reported pose, home, jog XYZ/R, move to an absolute target, and release/close/fully open the gripper. Commands run in the same serialized worker as experiments, so batch and manual operations cannot compete for a device. Operations and mode changes are disabled during an active command.
@@ -172,7 +188,7 @@ python scripts/check_project.py
 python scripts/check_project.py --unit-only
 ```
 
-The script uses the project's `.venv` when present, sets Qt to offscreen, and runs the unit suite plus simulation and mocked-hardware UI checks. No physical device is used. UI checks use temporary settings/output directories, so saved lab calibration is not read or changed; they refresh screenshots under `cad/` for review.
+The script uses the project's `.venv` when present, sets Qt to offscreen, and runs the unit suite plus simulation, mocked-hardware and layout-planning UI checks. No physical device is used. UI checks use temporary settings/output directories, so saved lab calibration is not read or changed; they refresh screenshots under `cad/` for review.
 
 The individual commands remain available:
 

@@ -48,9 +48,14 @@ class CalibrationDiagram(QWidget):
         # Include limits, all displayed rack slots, stations and origin. Equal XY
         # scaling preserves distances and circle shape, even outside the bounds.
         points=rack_points(s)
-        xs=[s.workspace_x_min,s.workspace_x_max,0,s.cell_x,s.rinse_x]+[x for _,x,_,_,_ in points]
-        ys=[s.workspace_y_min,s.workspace_y_max,0,s.cell_y,s.rinse_y]+[y for _,_,y,_,_ in points]
-        if self.workspace:
+        xs=[0,s.cell_x,s.rinse_x]+[x for _,x,_,_,_ in points]
+        ys=[0,s.cell_y,s.rinse_y]+[y for _,_,y,_,_ in points]
+        if s.workspace_enabled:
+            xs += [s.workspace_x_min,s.workspace_x_max]
+            ys += [s.workspace_y_min,s.workspace_y_max]
+        if self.envelope:
+            xs += self.envelope.xs; ys += self.envelope.ys
+        if self.workspace and s.workspace_enabled:
             xs += [-s.workspace_radius_max,s.workspace_radius_max]
             ys += [-s.workspace_radius_max,s.workspace_radius_max]
         if self.pose: xs.append(self.pose['x']); ys.append(self.pose['y'])
@@ -63,7 +68,7 @@ class CalibrationDiagram(QWidget):
             state=self.envelope.status(x,y,min(s.rack_z,s.cell_z,s.rinse_z),s.safe_z,s.tool_r)
             return '#0b9b82' if state is True else '#c34848' if state is False else '#8198a5'
         base=xy(0,0)
-        if self.workspace:
+        if self.workspace and s.workspace_enabled:
             p.setPen(QPen(QColor('#c6d8e0'),1.5)); p.setBrush(QColor('#e3eff2'))
             r=s.workspace_radius_max*scale; p.drawEllipse(base,r,r)
             p.setBrush(QColor('#f4f8fa')); r=s.workspace_radius_min*scale; p.drawEllipse(base,r,r); p.setBrush(Qt.BrushStyle.NoBrush)
@@ -76,8 +81,9 @@ class CalibrationDiagram(QWidget):
                     fill=QColor(color); fill.setAlpha(45); p.setBrush(fill)
                     p.drawRect(QRectF(xy(a,d),xy(b,c)).normalized())
             p.setBrush(Qt.BrushStyle.NoBrush)
-        a=xy(s.workspace_x_min,s.workspace_y_max); b=xy(s.workspace_x_max,s.workspace_y_min)
-        p.setPen(QPen(QColor('#635bce'),1.5)); p.drawRect(QRectF(a,b).normalized())
+        if s.workspace_enabled:
+            a=xy(s.workspace_x_min,s.workspace_y_max); b=xy(s.workspace_x_max,s.workspace_y_min)
+            p.setPen(QPen(QColor('#635bce'),1.5)); p.drawRect(QRectF(a,b).normalized())
         line(xy(xlo,0).x(),base.y(),xy(xhi,0).x(),base.y(),'#c6d8e0')
         line(base.x(),xy(0,ylo).y(),base.x(),xy(0,yhi).y(),'#c6d8e0')
         dot(base.x(),base.y(),'#8198a5',3); text(base.x()+5,base.y()-6,'0,0')
@@ -88,7 +94,13 @@ class CalibrationDiagram(QWidget):
             pos=xy(x,y); dot(pos.x(),pos.y(),map_color(x,y,color),5); text(pos.x()+8,pos.y()-8,label)
         if self.pose:
             pos=xy(self.pose['x'],self.pose['y']); dot(pos.x(),pos.y(),'#d97706',7,False); text(pos.x()+8,pos.y()+17,'Robot')
-        if self.workspace:
+        if self.workspace and not s.workspace_enabled:
+            text(20,334,'Application workspace limits OFF')
+            text(20,356,'Reach is checked by the controller when enabled')
+            text(20,378,'Saved map: advisory only' if s.workspace_map else 'No configured XYZ or radial restriction')
+            columns,rows,_=rack_layout(s)
+            text(510,334,f'{s.rack_layout.title()} rack: {columns} slots/row × {rows}; pitch {s.rack_pitch:g} mm')
+        elif self.workspace:
             text(20,334,f'X [{s.workspace_x_min:g}, {s.workspace_x_max:g}]   Y [{s.workspace_y_min:g}, {s.workspace_y_max:g}] mm')
             text(20,356,f'Radius [{s.workspace_radius_min:g}, {s.workspace_radius_max:g}] mm from base')
             text(20,378,'Map: green support / red rejection / grey unknown' if s.workspace_map else 'Allowed XY = rectangle ∩ radial band')
@@ -102,13 +114,18 @@ class CalibrationDiagram(QWidget):
         # Side view: shared absolute-Z scale. Station columns are categorical;
         # their XY positions are represented in the top view.
         live_z=self.pose['z'] if self.pose else s.safe_z
-        zlo=min(s.workspace_z_min,s.workspace_z_max,s.rack_z,s.cell_z,s.rinse_z,s.safe_z,live_z)
-        zhi=max(s.workspace_z_min,s.workspace_z_max,s.rack_z,s.cell_z,s.rinse_z,s.safe_z,live_z)
+        heights=[s.rack_z,s.cell_z,s.rinse_z,s.safe_z,live_z]
+        if s.workspace_enabled: heights += [s.workspace_z_min,s.workspace_z_max]
+        zlo,zhi=min(heights),max(heights)
         if zhi-zlo<50:
             middle=(zlo+zhi)/2; zlo,zhi=middle-25,middle+25
+        # Leave room for station labels above the fixed diagram footer.
+        padding=max(10,(zhi-zlo)*.15); zlo-=padding; zhi+=padding
         def zy(z): return 300-(z-zlo)/max(1,zhi-zlo)*235
         line(540,zy(zlo),540,zy(zhi),'#8198a5')
-        for z,name,color in ((s.workspace_z_max,'Z max','#635bce'),(s.workspace_z_min,'Z min','#635bce'),(s.safe_z,'Travel Z','#0e9f92')):
+        levels=[(s.safe_z,'Travel Z','#0e9f92')]
+        if s.workspace_enabled: levels += [(s.workspace_z_max,'Z max','#635bce'),(s.workspace_z_min,'Z min','#635bce')]
+        for z,name,color in levels:
             y=zy(z); line(540,y,940,y,color,name=='Travel Z'); text(800 if name.startswith('Z ') else 550,y-5,f'{name} {z:g} mm')
         for x,z,label in ((635,s.rack_z,'Rack grip'),(760,s.cell_z,'Cell seat'),(885,s.rinse_z,'Rinse dip')):
             line(x,zy(s.safe_z),x,zy(z)); dot(x,zy(z)); text(x-37,zy(z)+18,label); text(x-30,zy(z)+35,f'Z={z:g}')

@@ -22,7 +22,7 @@ class CoreTests(unittest.TestCase):
             self.assertEqual([(i,x,y,z) for i,x,y,z,_ in rack_points(s)],[(i,*s.rack_pose(i)) for i,_,_,_ in slots])
 
     def test_calibration_reports_multiple_conflicts(self):
-        s=Settings(safe_z=10,cell_x=350,workspace_y_min=100,workspace_y_max=-100)
+        s=Settings(workspace_enabled=True,safe_z=10,cell_x=350,workspace_y_min=100,workspace_y_max=-100)
         messages=[message for _,message in s.calibration_issues()]
         self.assertTrue(any('Y minimum' in m for m in messages))
         self.assertTrue(any('Travel Z must' in m for m in messages))

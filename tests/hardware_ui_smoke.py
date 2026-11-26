@@ -42,6 +42,7 @@ with tempfile.TemporaryDirectory() as d,patch.object(worker_module,'DobotRobot',
     w.fields['safe_z'].setValue(anchor['z']); app.processEvents()
     assert 'Travel Z must' in w.calibration_feedback.text() and not w.rehearse.isEnabled()
     w.preset_button.click(); idle(); assert not w.validation_issues
+    w.fields['workspace_enabled'].setChecked(True)
     before=w.read_settings()
     w.apply_compact_rehearsal(dict(anchor,x=295))
     assert w.read_settings()==before
@@ -128,6 +129,7 @@ with tempfile.TemporaryDirectory() as d,patch.object(worker_module,'DobotRobot',
     data=dict(format='electrobot-controller-workspace-v1',source='DobotLink.CheckPoseLimit',
               started_utc='Mock controller map',spec=spec,complete=True,
               points=[[*p,True,True] for p in scan_points(spec)])
+    w.fields['workspace_enabled'].setChecked(False)
     explorer.display_map(data); calls=len(arm.calls)
     anchor=dict(w.current_pose)
     with patch.object(QMessageBox,'question',return_value=QMessageBox.StandardButton.Yes):
@@ -135,6 +137,7 @@ with tempfile.TemporaryDirectory() as d,patch.object(worker_module,'DobotRobot',
         assert w.read_settings(validate=False).workspace_x_min==150
         assert w.read_settings(validate=False).workspace_z_max==5
         assert w.read_settings(validate=False).workspace_map==data
+        assert not w.fields['workspace_enabled'].isChecked()
         assert not w.fields['calibrated'].isChecked()
         w.fields['rack_x'].setValue(280)
         assert 'Unknown' in w.map_feedback.text()

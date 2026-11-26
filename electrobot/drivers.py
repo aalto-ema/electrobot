@@ -53,7 +53,7 @@ class DobotRobot:
             self.diagnostic(rejected_pose=dict(zip(('x','y','z','r'),target)),preflight='Rejected by configured bounds: '+label)
             raise ValueError(str(self._fault('Configured workspace rejected '+label+': '+str(exc)))) from exc
         if not self.s.controller_preflight:
-            self.diagnostic(preflight='Controller reachability disabled; configured bounds only'); return
+            self.diagnostic(preflight='Controller reachability disabled; application bounds '+('enabled' if self.s.workspace_enabled else 'disabled')); return
         if self._check_control is not self.control:
             self._checked.clear(); self._check_control=self.control
         key=tuple(round(v,6) for v in target)
@@ -87,7 +87,7 @@ class DobotRobot:
             self.diagnostic(preflight=f'Checking {i+1}/{len(route)}: {label}',target=dict(zip(('x','y','z','r'),target)))
             for sample in segment_samples(previous,target,self.s.reachability_step): self.check_pose(sample,label)
             previous=target
-        self.diagnostic(fault='',preflight=('Controller sampled route passed; not a collision check' if self.s.controller_preflight else 'Configured bounds passed; controller check disabled'))
+        self.diagnostic(fault='',preflight=('Controller sampled route passed; not a collision check' if self.s.controller_preflight else 'Controller check disabled; application bounds '+('enabled' if self.s.workspace_enabled else 'disabled')))
     def connect(self):
         if self.arm is not None: return
         try:

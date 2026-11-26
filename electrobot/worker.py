@@ -1,6 +1,6 @@
 """One serialized device owner; GUI only submits commands or sets cancel events."""
 import queue
-from dataclasses import asdict
+from dataclasses import asdict,replace
 from datetime import datetime,timezone
 from pathlib import Path
 from PySide6.QtCore import QThread,Signal
@@ -113,7 +113,7 @@ class DeviceWorker(QThread):
                                 # Rejections are map data, not motion faults. An unsupported
                                 # query aborts; it must not paint every sample as unreachable.
                                 accepted=not self.robot.controller_limited(point)
-                                try: s.validate_pose(point); inside=True
+                                try: replace(s,workspace_enabled=True).validate_pose(point); inside=True
                                 except ValueError: inside=False
                                 self.workspace_sample.emit({'kind':'point','point':[*point,accepted,inside],'done':i+1,'total':len(points)})
                         except Exception:

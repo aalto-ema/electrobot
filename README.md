@@ -61,6 +61,21 @@ The plot overlays electrodes or shows a selected electrode. Displayed points are
 
 Native PalmSens CV returns to its start potential, so the UI has a combined **Start / end** setting. The simulator follows that same protocol. The reference label, potential step, fixed current range, mains frequency and simulation multiplier live under Settings → Measurement defaults.
 
+## Optional workspace limits and 32-electrode preset
+
+**Settings → Workspace → Enforce configured workspace bounds** is off by default, including when loading older profiles without this option. With it off, saved XYZ limits and the radial band do not restrict manual moves, rehearsal or experiments. Enable it to impose a smaller application workspace. Bounds remain stored when disabled. The diagrams hide inactive bounds and show their disabled status; saved controller maps remain advisory. Applying a map does not enable bounds automatically.
+
+Controller pose-limit checks remain enabled by default and independent of this switch. Controller rejections, runtime alarms, stall/timeout handling, Stop, homing and hardware readiness checks remain in place. Disabling application bounds does not establish physical clearance or remove the existing tool-rotation/input validation.
+
+Use **Settings → Robot calibration → Apply 32-electrode screening preset**, or load [`profiles/screening-32-provisional.json`](profiles/screening-32-provisional.json). This is a configurable starting layout, not a commissioned route:
+
+- 32 electrodes: two radial rows of 16, at radii 210 and 250 mm.
+- Slots advance in 10° steps from −75° to +75° in each row.
+- Cell XYZ: (140, −70, 0) mm; rinse XYZ: (140, 70, 0) mm.
+- Rack gripping Z: 0 mm; Travel Z: 40 mm; tool R: 0°.
+
+The UI preset preserves device connections, acquisition parameters and manufacturing dimensions, turns application bounds off, and clears calibration/fixture readiness. It sends no motion and does not overwrite a saved profile until you save. The downloadable JSON is a complete example with default device/protocol/manufacturing settings. The original small startup layout remains available; existing saved coordinates are not replaced automatically. Teach actual gripping, seating, dipping and travel heights, and check the complete controller route and physical fixture clearance before use. Larger custom holders may require increased slot spacing.
+
 ## Manual robot
 
 Use **Manual robot** to read the reported pose, home, jog XYZ/R, move to an absolute target, and release/close/fully open the gripper. Commands run in the same serialized worker as experiments, so batch and manual operations cannot compete for a device. Operations and mode changes are disabled during an active command.
@@ -206,9 +221,9 @@ Grey means unknown, including unsupported firmware or an interrupted query. Simu
 
 ### Apply a map and arrange the experiment
 
-Set rack/cell/rinse Z and Travel Z to describe the required vertical stroke. Scan that range (or load a historical scan that covers it) at the same tool R. In Workspace explorer, **Use this workspace in Settings…** previews the largest rectangular group of accepted grid cells covering that Z span. Confirming stores the full map in the profile and replaces Cartesian bounds with the proposed XY rectangle and required Z span. Existing radial bounds remain active. It does not change station positions, Travel Z or mode, connect devices or move the robot. Save configuration to persist the profile.
+Set rack/cell/rinse Z and Travel Z to describe the required vertical stroke. Scan that range (or load a historical scan that covers it) at the same tool R. In Workspace explorer, **Use this workspace in Settings…** previews the largest rectangular group of accepted grid cells covering that Z span. Confirming stores the full map in the profile and replaces Cartesian bounds with the proposed XY rectangle and required Z span. Existing radial bounds remain stored and apply only when workspace enforcement is enabled. It does not change station positions, Travel Z or mode, connect devices or move the robot. Save configuration to persist the profile.
 
-Settings → Workspace and the pinned calibration diagrams show green support, red rejected supporting samples and grey unknown regions. A position between samples is supported only if all surrounding XY/Z samples covering the required stroke were accepted. This groups samples for planning; it is not a proof that every intermediate pose is reachable. Missing samples, outside-scan coordinates and a changed R are unknown. Map feedback is advisory; configured bounds and live route checks still govern movement.
+Settings → Workspace and the pinned calibration diagrams show green support, red rejected supporting samples and grey unknown regions. A position between samples is supported only if all surrounding XY/Z samples covering the required stroke were accepted. This groups samples for planning; it is not a proof that every intermediate pose is reachable. Missing samples, outside-scan coordinates and a changed R are unknown. Map feedback is advisory; enabled application bounds and live route checks govern movement.
 
 **Fit rack within mapped workspace…** previews a nearby placement for every exported rack slot, preserving rectangular/radial layout, spacing and slot mapping. Rectangular fitting changes the first-slot X/Y; radial fitting changes radius/start angle. Accepting clears calibration/fixture verification and leaves cell/rinse positions unchanged. Physical station footprints, obstacles and swept gripper clearance are not fitted. Removing the saved map retains the numerical bounds. Maps can be historical; recheck on current hardware before handling.
 

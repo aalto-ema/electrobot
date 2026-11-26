@@ -51,6 +51,7 @@ class Window(QMainWindow):
                     'workspace_x_min','workspace_x_max','workspace_y_min','workspace_y_max',
                     'workspace_z_min','workspace_z_max','workspace_radius_min','workspace_radius_max'):
             self.fields[key].valueChanged.connect(lambda:self.fields['calibrated'].setChecked(False))
+        self.fields['workspace_enabled'].toggled.connect(lambda:self.fields['calibrated'].setChecked(False))
         self.fields['rack_layout'].currentIndexChanged.connect(lambda:self.fields['calibrated'].setChecked(False))
         for key in ('rod_diameter','rod_length','shoulder_diameter','tip_below_shoulder',
                     'cap_thickness','we_clearance','funnel_diameter','rack_socket_clearance','rack_socket_depth','rack_post_height','rack_socket_wall','rack_base_thickness','rack_margin'):
@@ -180,6 +181,18 @@ class Window(QMainWindow):
             self.calibration_feedback.setStyleSheet('color: #b53636;'); return
         self.apply_settings(s)
         self.statusBar().showMessage('Compact preset applied from fresh pose; no movement commanded. Verify the empty route before marking readiness.')
+
+    def apply_screening_preset(self):
+        if self.busy or self.device_state.get('holding'): return
+        s=self.read_settings(validate=False).screening_preset()
+        try:
+            s.validate()
+            issues=s.calibration_issues()
+            if issues: raise ValueError('\n'.join(dict.fromkeys(m for _,m in issues)))
+        except ValueError as exc:
+            self.statusBar().showMessage('32-electrode preset not applied: '+str(exc)); return
+        self.apply_settings(s)
+        self.statusBar().showMessage('Provisional 32-slot layout applied; no movement. Teach station Z and verify the route before hardware use.')
 
     def save(self):
         try:
@@ -316,6 +329,9 @@ class Window(QMainWindow):
         robot,self.calibration_feedback,self.calibration_diagram,self.calibration_scroll=self.calibration_tab('Robot calibration')
         self.preset_button=button('Compact rehearsal from current pose',self.compact_rehearsal_preset,True); robot.addWidget(self.preset_button)
         robot.addWidget(self.note('Empty-gripper preset: read the live pose, use it as rack slot 1, offset cell +10 mm X and rinse +10 mm X/+10 mm Y, and set travel Z +5 mm. No movement is commanded. Readiness is cleared.'))
+        self.screening_preset_button=button('Apply 32-electrode screening preset',self.apply_screening_preset)
+        robot.addWidget(self.screening_preset_button)
+        robot.addWidget(self.note('Provisional layout: two arcs of 16 slots at radii 210 / 250 mm, spanning −75° to +75°. Cell (140, −70), rinse (140, 70); station Z 0, travel Z 40 mm. Application bounds are turned off; readiness is cleared. Teach actual heights and verify clearance. No movement is commanded.'))
         layout_group=QGroupBox('Rack layout'); lf=QFormLayout(layout_group)
         self.combo_field(lf,'rack_layout','Slot arrangement',[('Rectangular grid','rectangular'),('Radial arcs around robot base','radial')]); robot.addWidget(layout_group)
         robot.addWidget(self.settings_group('Radial layout (mm / degrees)', [('rack_radius','First row radius',1,400),('rack_start_angle','Slot 1 angle (°)',-180,180),('rack_angle_step','Angle between slots (°)',.1,90)]))
@@ -339,7 +355,8 @@ class Window(QMainWindow):
         robot.addWidget(self.settings_group('Hardware batch readiness', [('calibrated','Station poses and paths calibrated'),('fixture_verified','Gripper, seating and dry contact verified')]))
         robot.addWidget(self.note('Default coordinates and workspace bounds are placeholders. Position feedback verifies arm pose, not successful pickup or electrical contact. No automatic retry is enabled.')); robot.addStretch()
         bounds,self.workspace_feedback,self.workspace_diagram,self.workspace_scroll=self.calibration_tab('Workspace')
-        bounds.addWidget(self.note('These bounds constrain commanded endpoints. They do not model obstacles, joint limits or collision-free paths. Validate the complete travel route in the lab.'))
+        bounds.addWidget(self.settings_group('Optional application limits', [('workspace_enabled','Enforce configured workspace bounds')]))
+        bounds.addWidget(self.note('Off by default: stored XYZ/radial bounds do not restrict movement. Controller pose checks, alarms and stop handling remain independent. Enable to impose a smaller working area. Saved maps are advisory; neither maps nor bounds model obstacles.'))
         bounds.addWidget(self.settings_group('Cartesian bounds (mm)', [(f'workspace_{axis}_{end}',f'{axis.upper()} {end}',-400,400) for axis in 'xyz' for end in ('min','max')]))
         bounds.addWidget(self.settings_group('Radial bounds from base (mm)', [('workspace_radius_min','Minimum radius',0,400),('workspace_radius_max','Maximum radius',1,400)]))
         bounds.addWidget(self.settings_group('Rinse footprint (mm)', [('rinse_beaker_diameter','Rinse beaker diameter',10,250)]))
@@ -351,7 +368,7 @@ class Window(QMainWindow):
         mapped.addWidget(self.fit_rack_button); mapped.addWidget(self.clear_map_button); bounds.addLayout(mapped)
         self.route_check=button('Check planned route · no movement',lambda:self.submit('check_route')); bounds.addWidget(self.route_check)
         bounds.addWidget(button('Workspace explorer…',self.open_workspace_explorer))
-        bounds.addWidget(self.note('Connected/homed Hardware robot required. Asks DobotLink CheckPoseLimit about XYZ/R at station heights, Travel Z and sampled straight transfers. This detects supported controller limits, not obstacles or full collision clearance. Unsupported firmware blocks this check; disabling it explicitly leaves configured bounds, alarm monitoring and the progress watchdog. A passed check applies only to that settings snapshot.'))
+        bounds.addWidget(self.note('Connected/homed Hardware robot required. Asks DobotLink CheckPoseLimit about XYZ/R at station heights, Travel Z and sampled straight transfers. This detects supported controller limits, not obstacles or full collision clearance. Unsupported firmware blocks this check; disabling it explicitly leaves optional application bounds, alarm monitoring and the progress watchdog. A passed check applies only to that settings snapshot.'))
         bounds.addStretch()
         cell=self.settings_tab('Cell & carrier'); row=QHBoxLayout()
         row.addWidget(self.settings_group('Beaker & cap (mm)', [('beaker_diameter','Body diameter'),('beaker_height','Beaker height'),('rim_diameter','Measured rim diameter'),('cap_clearance','Diametral clearance'),('cap_wall','Skirt wall'),('cap_thickness','Plate thickness'),('skirt_depth','Skirt depth'),('re_hole','RE opening'),('ce_hole','CE opening'),('port_offset','RE/CE offset')]))
@@ -423,7 +440,7 @@ class Window(QMainWindow):
         text=(f'Current experiment Z span: {low:g} to {high:g} mm, R {s.tool_r:g}°.\n'
               f'Proposed X bounds: {xmin:g} to {xmax:g}; Y: {ymin:g} to {ymax:g} mm.\n'
               'Save the full map and replace XYZ bounds with this rectangle and Z span? '
-              'Radial bounds stay in effect. Rack/cell/rinse positions and Travel Z are unchanged.\n'
+              'Bounds are enforced only when Enforce configured workspace bounds is enabled. Rack/cell/rinse positions and Travel Z are unchanged.\n'
               'The rectangle groups accepted corner samples; its interior is untested. '
               'Historical maps require rechecking on current hardware. No movement will occur.')
         if QMessageBox.question(self,'Use controller workspace',text)!=QMessageBox.StandardButton.Yes: return
@@ -556,6 +573,9 @@ class Window(QMainWindow):
         for key in ('rack_x','rack_y'): self.fields[key].setEnabled(idle and not radial)
         self.placement_export.setEnabled(idle); self.rack_export.setEnabled(idle)
         self.lattice_preset.setEnabled(idle)
+        self.screening_preset_button.setEnabled(idle and not d.get('holding',False))
+        for key in ('workspace_x_min','workspace_x_max','workspace_y_min','workspace_y_max','workspace_z_min','workspace_z_max','workspace_radius_min','workspace_radius_max'):
+            self.fields[key].setEnabled(idle and self.fields['workspace_enabled'].isChecked())
         self.update_map_feedback(self.read_settings(validate=False))
         can_check=idle and hardware and d.get('robot',False) and d.get('homed',False)
         if self.workspace_explorer: self.workspace_explorer.set_available(can_check)

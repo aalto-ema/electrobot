@@ -11,6 +11,7 @@ def within_workspace(value,lower,upper):
 @dataclass
 class Settings:
     workspace_map: dict = field(default_factory=dict)
+    workspace_enabled: bool = False
     mode: str = 'simulation'
     run_name: str = 'Electrode screening'
     first_electrode: int = 1
@@ -154,11 +155,14 @@ class Settings:
         if self.workspace_map:
             from .workspace_map import validate_saved_map
             validate_saved_map(self.workspace_map)
-        for axis in 'xyz':
-            if getattr(self,f'workspace_{axis}_min') >= getattr(self,f'workspace_{axis}_max'):
-                raise ValueError(f'Invalid workspace {axis.upper()} bounds')
-        if not 0 <= self.workspace_radius_min < self.workspace_radius_max or not -90 <= self.tool_r <= 90:
-            raise ValueError('Invalid radial bounds or tool rotation')
+        if self.workspace_enabled:
+            for axis in 'xyz':
+                if getattr(self,f'workspace_{axis}_min') >= getattr(self,f'workspace_{axis}_max'):
+                    raise ValueError(f'Invalid workspace {axis.upper()} bounds')
+            if not 0 <= self.workspace_radius_min < self.workspace_radius_max:
+                raise ValueError('Invalid radial bounds')
+        if not -90 <= self.tool_r <= 90:
+            raise ValueError('Invalid tool rotation')
         if self.mode=='hardware' and not math.isclose(self.end_v,self.start_v,abs_tol=1e-9):
             raise ValueError('PalmSens CV ends at its start potential; end must equal start')
         for key, value in asdict(self).items():
@@ -291,12 +295,13 @@ class Settings:
     def validate_pose(self,pose):
         if len(pose) not in (3,4) or not all(math.isfinite(v) for v in pose):
             raise ValueError('Pose must have finite XYZ and optional R values')
-        for axis,value in zip('xyz',pose):
-            if not within_workspace(value,getattr(self,f'workspace_{axis}_min'),getattr(self,f'workspace_{axis}_max')):
-                raise ValueError(f'{axis.upper()} target {value:g} lies outside configured workspace')
-        radius=math.hypot(pose[0],pose[1])
-        if not within_workspace(radius,self.workspace_radius_min,self.workspace_radius_max):
-            raise ValueError(f'Target radius {radius:.1f} mm lies outside configured workspace')
+        if self.workspace_enabled:
+            for axis,value in zip('xyz',pose):
+                if not within_workspace(value,getattr(self,f'workspace_{axis}_min'),getattr(self,f'workspace_{axis}_max')):
+                    raise ValueError(f'{axis.upper()} target {value:g} lies outside configured workspace')
+            radius=math.hypot(pose[0],pose[1])
+            if not within_workspace(radius,self.workspace_radius_min,self.workspace_radius_max):
+                raise ValueError(f'Target radius {radius:.1f} mm lies outside configured workspace')
         if len(pose)==4 and not -90 <= pose[3] <= 90:
             raise ValueError('Tool rotation must be within ±90 degrees')
         return pose
@@ -305,11 +310,12 @@ class Settings:
         """All independent calibration problems, including in simulation."""
         issues=[]
         def add(keys,message): issues.append((keys,message))
-        for axis in 'xyz':
-            a,b=f'workspace_{axis}_min',f'workspace_{axis}_max'
-            if getattr(self,a)>=getattr(self,b): add((a,b),f'{axis.upper()} minimum must be below maximum.')
-        if self.workspace_radius_min>=self.workspace_radius_max:
-            add(('workspace_radius_min','workspace_radius_max'),'Minimum radius must be below maximum radius.')
+        if self.workspace_enabled:
+            for axis in 'xyz':
+                a,b=f'workspace_{axis}_min',f'workspace_{axis}_max'
+                if getattr(self,a)>=getattr(self,b): add((a,b),f'{axis.upper()} minimum must be below maximum.')
+            if self.workspace_radius_min>=self.workspace_radius_max:
+                add(('workspace_radius_min','workspace_radius_max'),'Minimum radius must be below maximum radius.')
         for key,label in (('rack_z','Rack gripping'),('cell_z','Cell seating'),('rinse_z','Rinse dipping')):
             if self.safe_z<=getattr(self,key): add(('safe_z',key),f'Travel Z must be above {label.lower()} Z.')
         if self.rack_pitch<=self.shoulder_diameter+4:
@@ -320,6 +326,7 @@ class Settings:
             if any(math.dist(a[:2],b[:2])<separation for b in positions[i+1:]):
                 add(('rack_layout','rack_columns','rack_pitch','rack_radius','rack_angle_step','rack_socket_wall','shoulder_diameter','holder_diameter','holder_flange_diameter','rack_gripper_gap'),f'Rack slots need at least {separation:g} mm separation for carriers and the selected rack design.')
                 break
+        if not self.workspace_enabled: return issues
         slots=range(self.first_electrode,min(101,self.first_electrode+self.electrodes))
         rack_keys=('rack_radius','rack_start_angle','rack_angle_step') if self.rack_layout=='radial' else ('rack_x','rack_y')
         stations=[(f'Rack slot {i}',self.rack_pose(i),(*rack_keys,'rack_z','rack_pitch','rack_columns','first_electrode','electrodes')) for i in slots]
@@ -334,6 +341,16 @@ class Settings:
         if not within_workspace(self.safe_z,self.workspace_z_min,self.workspace_z_max):
             add(('safe_z','workspace_z_min','workspace_z_max'),'Travel Z is outside workspace Z limits.')
         return issues
+
+    def screening_preset(self):
+        """Provisional 32-slot layout; preserve devices, protocol and manufacturing settings."""
+        from dataclasses import replace
+        return replace(self,run_name='32-electrode screening',first_electrode=1,electrodes=32,
+            rack_layout='radial',rack_columns=16,rack_radius=210.0,rack_start_angle=-75.0,
+            rack_angle_step=10.0,rack_pitch=40.0,rack_z=0.0,safe_z=40.0,
+            cell_x=140.0,cell_y=-70.0,cell_z=0.0,
+            rinse_x=140.0,rinse_y=70.0,rinse_z=0.0,tool_r=0.0,
+            workspace_enabled=False,calibrated=False,fixture_verified=False)
 
     def validate_batch(self):
         self.validate()

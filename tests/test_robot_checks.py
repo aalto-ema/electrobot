@@ -5,7 +5,7 @@ from electrobot.config import Settings
 
 class RobotCheckTests(unittest.TestCase):
     def test_workspace_numerical_allowance_is_small_and_absolute(self):
-        s=Settings(workspace_x_min=120,workspace_x_max=300,
+        s=Settings(workspace_enabled=True,workspace_x_min=120,workspace_x_max=300,
                    workspace_y_min=0,workspace_y_max=100,workspace_z_min=0,workspace_z_max=50)
         for pose in ((200,0,-3.57628e-06),(120-3e-6,0,0),(300+3e-6,0,0),
                      (200,-3e-6,0),(200,100+3e-6,0),(200,0,50+3e-6)):
@@ -19,7 +19,7 @@ class RobotCheckTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'radius'): s.validate_pose((radius,0,0))
 
     def test_calibration_uses_same_workspace_allowance(self):
-        s=Settings(workspace_z_min=0,rack_z=-3.57628e-06,
+        s=Settings(workspace_enabled=True,workspace_z_min=0,rack_z=-3.57628e-06,
                    workspace_z_max=80-3e-6,safe_z=80)
         self.assertFalse(any('outside workspace' in message for _,message in s.calibration_issues()))
         s.rack_z=-.001; s.safe_z=80.001
@@ -36,7 +36,7 @@ class RobotCheckTests(unittest.TestCase):
             with self.assertRaises(ValueError): alarm_codes(raw)
 
     def test_route_contains_travel_z_and_segment_inner_exclusion(self):
-        s=Settings(safe_z=100)
+        s=Settings(workspace_enabled=True,safe_z=100)
         route=s.planned_route((200,0,68.8,0))
         self.assertEqual(route[1][1],(200,0,100,0))
         samples=segment_samples((200,0,0,0),(-200,0,0,0),37)

@@ -24,6 +24,30 @@ assert w.fields['scan_rate'].isVisible()
 assert w.preview.isVisible()
 assert w.calibration_diagram.workspace and w.workspace_diagram.workspace
 assert not w.fields['rack_pitch'].isVisible()
+# Workspace restrictions are explicitly optional, persistent and independent of preflight.
+assert not w.fields['workspace_enabled'].isChecked()
+assert not w.fields['workspace_x_max'].isEnabled()
+initial=w.read_settings()
+w.fields['calibrated'].setChecked(True)
+w.fields['workspace_enabled'].setChecked(True)
+assert not w.fields['calibrated'].isChecked() and w.fields['workspace_x_max'].isEnabled()
+w.fields['cell_x'].setValue(350)
+assert any('outside' in m for _,m in w.validation_issues)
+w.fields['workspace_enabled'].setChecked(False)
+assert not w.validation_issues and w.fields['controller_preflight'].isChecked()
+w.apply_settings(initial)
+pose_before=dict(w.current_pose)
+w.screening_preset_button.click(); app.processEvents()
+assert w.read_settings().electrodes==32 and len(w.read_settings().rack_export_positions())==32
+assert w.current_pose==pose_before and not w.validation_issues
+assert w.queue_table.rowCount()==32
+assert not w.fields['calibrated'].isChecked() and not w.fields['fixture_verified'].isChecked()
+w.nav.setCurrentRow(2); w.settings_tabs.setCurrentIndex(2); app.processEvents()
+w.grab().save('cad/ui-screening-32.png')
+w.resize(1120,760); app.processEvents(); w.grab().save('cad/ui-screening-32-compact.png')
+w.settings_tabs.setCurrentIndex(3); app.processEvents(); w.grab().save('cad/ui-workspace-optional.png')
+w.resize(1440,960); w.apply_settings(initial)
+
 for i in range(3):
     w.nav.setCurrentRow(i); app.processEvents(); w.grab().save(str(Path('cad')/f'ui-{i}.png'))
 for index in range(w.settings_tabs.count()):
@@ -64,6 +88,7 @@ with tempfile.TemporaryDirectory() as d:
     import electrobot.app as module
     with patch.object(module,'ROOT',Path(d)): w.save()
     config=json.loads(path.read_text()); assert config['first_electrode']==2
+    assert config['workspace_enabled'] is False
     w.fields['electrodes'].setValue(1)
     with patch.object(module.QFileDialog,'getOpenFileName',return_value=(str(path),'JSON')): w.load()
     assert w.fields['electrodes'].value()==3

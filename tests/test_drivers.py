@@ -90,7 +90,7 @@ class DriverTests(unittest.TestCase):
         r.stop(); self.assertFalse(r.homed); self.assertEqual(r.arm.calls[-2:],['stop','clear'])
         r.disconnect()
     def test_outside_workspace_is_not_sent(self):
-        r=self.robot(); r.home()
+        r=self.robot(workspace_enabled=True); r.home()
         with self.assertRaises(ValueError): r.move((999,0,0,0))
         self.assertFalse(any(isinstance(c,tuple) and c[0]=='move' for c in r.arm.calls))
         r.disconnect()
@@ -241,7 +241,7 @@ class DriverTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d,self.assertRaises(RuntimeError):
             Experiment(s,Control(),lambda e:None,lambda *a:None,d).run()
         with self.assertRaises(ValueError): Settings(mode='hardware',end_v=.2).validate()
-        with self.assertRaises(ValueError): Settings(mode='hardware',calibrated=True,fixture_verified=True,electrodes=100).validate_batch()
+        with self.assertRaises(ValueError): Settings(mode='hardware',workspace_enabled=True,calibrated=True,fixture_verified=True,electrodes=100).validate_batch()
     def test_hardware_sequence_waits_unscaled_and_exports_real_flag(self):
         class ImmediateControl(Control):
             def __init__(self): super().__init__(); self.durations=[]

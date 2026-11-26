@@ -20,7 +20,7 @@ class DobotRobot:
     def _fault(self,reason):
         target=self.diagnostics['target']; actual=self.diagnostics['actual']
         def fmt(p): return ', '.join(f'{k.upper()}={p[k]:.2f}' for k in ('x','y','z','r')) if p else 'unavailable'
-        message=f'{reason}\nRequested: {fmt(target)}\nReported: {fmt(actual)}'
+        message=f'{reason}\nPhase: {self.diagnostics.get("phase","unspecified")}\nRequested: {fmt(target)}\nReported: {fmt(actual)}'
         self.diagnostic(fault=message); return RuntimeError(message)
     def read_alarms(self):
         raw=None
@@ -72,6 +72,7 @@ class DobotRobot:
         """Query only; deliberately independent of the user's workspace bounds."""
         self.control.check()
         if len(target)!=4 or not all(math.isfinite(v) for v in target): raise ValueError('Invalid query pose')
+        self.diagnostics['last_query_pose']=dict(zip(('x','y','z','r'),target))
         response=response_params(self.arm.cmds._call('CheckPoseLimit',call_timeout=self.s.robot_timeout,
             isJoint=False,**dict(zip(('x','y','z','r'),target))))
         limited=response.get('isLimited') if isinstance(response,dict) else None
@@ -80,12 +81,14 @@ class DobotRobot:
     def preflight_route(self,route):
         self._checked.clear(); self._check_control=self.control
         self.pose()
-        self.diagnostic(rejected_pose=None)
+        self.diagnostic(rejected_pose=None,phase='route validation: before queries')
         self.check_alarms()
         previous=route[0][1]
         for i,(label,target) in enumerate(route):
             self.diagnostic(preflight=f'Checking {i+1}/{len(route)}: {label}',target=dict(zip(('x','y','z','r'),target)))
             for sample in segment_samples(previous,target,self.s.reachability_step): self.check_pose(sample,label)
+            self.diagnostic(phase='route validation: after '+label)
+            self.check_alarms()
             previous=target
         self.diagnostic(fault='',preflight=('Controller sampled route passed; not a collision check' if self.s.controller_preflight else 'Controller check disabled; application bounds '+('enabled' if self.s.workspace_enabled else 'disabled')))
     def connect(self):
@@ -148,11 +151,13 @@ class DobotRobot:
             except Exception as cleanup: self.diagnostic(fault=self.diagnostics['fault']+'\nRobot stop failed: '+str(cleanup))
             raise
     def home(self):
+        self.diagnostic(phase="homing")
         self.control.check(); self.check_alarms(); self.arm.cmds.queue_start()
         self.diagnostic(target=dict(zip(('x','y','z','r'),(200.,0.,0.,0.))),rejected_pose=None)
         self._wait_index(self.arm.home(wait=False),self.s.home_timeout,(200.0,0.0,0.0,0.0))
         self.homed=True; self._checked.clear(); self.diagnostic(fault='',preflight='Not checked after homing')
     def move(self,pose):
+        self.diagnostic(phase="individual move validation")
         if not self.homed: raise RuntimeError('Home the robot in Manual robot before moving')
         target=tuple(pose) if len(pose)==4 else (*pose,self.s.tool_r)
         self.diagnostic(target=dict(zip(('x','y','z','r'),target)),rejected_pose=None)
@@ -163,6 +168,8 @@ class DobotRobot:
         current=self.pose()
         for sample in segment_samples(tuple(current[k] for k in ('x','y','z','r')),target,self.s.reachability_step): self.check_pose(sample,'requested move')
         from dobotkit import PTPMode
+        self.check_alarms()
+        self.diagnostic(phase="individual movement")
         self.arm.set_speed(self.s.robot_velocity,self.s.robot_acceleration)
         index=self.arm.move_to(*target,mode=PTPMode.MOVL_XYZ,wait=False)
         self._wait_index(index,self.s.motion_timeout,target)
@@ -180,13 +187,21 @@ class DobotRobot:
 
     def prepare_transfers(self,initial):
         """Read-only feature checks and shortcut compilation before any handling."""
-        if self.s.continuous_motion: self.queue_space()
+        self.diagnostic(phase='transfer preparation: before queries',
+            route_simplification=self.s.route_simplification,continuous_motion=self.s.continuous_motion)
+        self.check_alarms()
+        if self.s.continuous_motion:
+            self.queue_space()
+            self.diagnostic(phase='transfer preparation: after queue-space query')
+            self.check_alarms()
         if self.s.route_simplification and self.s.transfer_plan:
             from .layout_planner import LayoutPlanner,simplify_transfers
             planner=LayoutPlanner(self.s,self.controller_limited,self.control.check,
                 lambda text:self.diagnostic(preflight='Simplifying transfers: '+text))
             self.diagnostic(preflight='Checking shortcut segments without movement')
             plan=simplify_transfers(self.s,initial,planner.segment,self.control.check)
+            self.diagnostic(phase='transfer preparation: after shortcut queries')
+            self.check_alarms()
             self.s.transfer_plan=plan
             self.diagnostic(preflight=f'Prepared {len(plan.get("shortcut_edges",[]))} controller-checked shortcut segments')
 
@@ -197,6 +212,7 @@ class DobotRobot:
             return
         if not self.homed: raise RuntimeError('Home the robot before moving')
         if not points: return
+        self.diagnostic(phase="queued transfer validation")
         current=self.pose(); start=tuple(current[k] for k in ('x','y','z','r'))
         targets=[tuple(p) for p in points]
         # Only horizontal transfer blocks may be queued. Vertical clearance,
@@ -218,6 +234,8 @@ class DobotRobot:
             if math.dist(previous,target)>1e-8: compact.append(target)
             previous=target
         if not compact: return
+        self.check_alarms()
+        self.diagnostic(phase="queued transfer upload/execution")
         targets=compact; final=targets[-1]
         self.diagnostic(target=dict(zip(('x','y','z','r'),final)),rejected_pose=None)
         from dobotkit import PTPMode

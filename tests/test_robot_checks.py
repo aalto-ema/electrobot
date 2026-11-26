@@ -43,3 +43,37 @@ class RobotCheckTests(unittest.TestCase):
         self.assertTrue(any(abs(p[0])<1e-10 for p in samples))
         with self.assertRaises(ValueError):
             for p in samples: s.validate_pose(p)
+
+
+class PreflightAlarmTests(unittest.TestCase):
+    def test_alarm_raised_by_query_prevents_pass_without_movement(self):
+        from electrobot.drivers import DobotRobot
+        from electrobot.engine import Control
+        from test_drivers import FakeArm
+        robot=DobotRobot(Settings(),Control(),arm_factory=FakeArm)
+        robot.connect()
+        def query(p):
+            robot.arm.alarms[12]=16  # alarm 100
+            return False
+        robot.arm.limited=query
+        with self.assertRaisesRegex(RuntimeError,'100.*'):
+            robot.preflight_route([('initial',(200,0,0,0)),('lift',(200,0,80,0))])
+        self.assertNotIn('passed',robot.diagnostics['preflight'])
+        self.assertEqual(robot.diagnostics['last_query_pose']['z'],0)
+        self.assertIn('route validation: after initial',robot.diagnostics['fault'])
+        self.assertFalse(any(isinstance(c,tuple) and c[0]=='move' for c in robot.arm.calls))
+
+    def test_shortcut_alarm_does_not_publish_plan(self):
+        from unittest.mock import patch
+        from electrobot.drivers import DobotRobot
+        from electrobot.engine import Control
+        from test_drivers import FakeArm
+        s=Settings(route_simplification=True,transfer_plan={'original':True})
+        robot=DobotRobot(s,Control(),arm_factory=FakeArm); robot.connect()
+        def simplify(*args):
+            robot.arm.alarms[12]=16
+            return {'replacement':True}
+        with patch('electrobot.layout_planner.simplify_transfers',side_effect=simplify):
+            with self.assertRaisesRegex(RuntimeError,'after shortcut queries'):
+                robot.prepare_transfers((200,0,0,0))
+        self.assertEqual(s.transfer_plan,{'original':True})

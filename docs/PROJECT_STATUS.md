@@ -1,6 +1,6 @@
 # Project status and open design decisions
 
-Last reviewed: 2026-10-23. Update this document when capabilities or physical evidence change. Source code describes behavior; a passing mocked test is not a lab commissioning result.
+Last reviewed: 2026-11-26. Update this document when capabilities or physical evidence change. Source code describes behavior; a passing mocked test is not a lab commissioning result.
 
 ## Established project choices
 
@@ -28,6 +28,8 @@ Last reviewed: 2026-10-23. Update this document when capabilities or physical ev
 - Unit tests, offscreen UI checks and a mocked hardware UI integration check. No cloud service is required to run the app.
 
 ## Physical evidence and assumptions
+
+On 2026-11-26 the user reported controller alarm 100 (0x64), currently displayed as unmapped, after the transfer-motion options were introduced. Whether continuous motion was enabled, the failing operation/pose, and the physical firmware alarm meaning are not yet known. No causal link to queued transfers or workspace limits is established. Next evidence: Manual robot → Diagnostic details → Copy diagnostic report, option states, and the alarm description shown by Dobot software. Leave continuous motion disabled while investigating; no automatic alarm clearing or recovery movement has been added.
 
 The user supplied working basic Dobot movement code and camera capture code, reported the gripper's three pneumatic states, and has begun robot rehearsal with the application. On 2026-10-14 they reported a stopped move after setting Travel Z to 100 mm, with Manual robot showing X=200, Y=0, Z=68.80, R=0. This suggests the initial vertical lift may have failed before sideways travel, but the cause is not confirmed by controller alarm data. This single observation is not a measured reach envelope. Full robot/potentiostat commissioning remains incomplete.
 

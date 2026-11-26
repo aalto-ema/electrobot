@@ -51,6 +51,8 @@ class Window(QMainWindow):
                     'workspace_x_min','workspace_x_max','workspace_y_min','workspace_y_max',
                     'workspace_z_min','workspace_z_max','workspace_radius_min','workspace_radius_max'):
             self.fields[key].valueChanged.connect(lambda:self.fields['calibrated'].setChecked(False))
+        for key in ('route_simplification','continuous_motion'):
+            self.fields[key].toggled.connect(lambda:self.fields['calibrated'].setChecked(False))
         self.fields['workspace_enabled'].toggled.connect(lambda:self.fields['calibrated'].setChecked(False))
         self.fields['rack_layout'].currentIndexChanged.connect(lambda:self.fields['calibrated'].setChecked(False))
         for key in ('rod_diameter','rod_length','shoulder_diameter','tip_below_shoulder',
@@ -346,6 +348,8 @@ class Window(QMainWindow):
         row=QHBoxLayout()
         row.addWidget(self.settings_group('Rack (mm)', [('rack_columns','Columns',1,20),('rack_pitch','Slot pitch'),('rack_x','First slot X',-400,400),('rack_y','First slot Y',-400,400),('rack_z','Gripping Z',-100,300),('safe_z','Travel Z',-100,300)]))
         row.addWidget(self.settings_group('Stations (mm)', [('cell_x','Cell X',-400,400),('cell_y','Cell Y',-400,400),('cell_z','Cell seating Z',-100,300),('rinse_x','Rinse X',-400,400),('rinse_y','Rinse Y',-400,400),('rinse_z','Rinse dipping Z',-100,300),('tool_r','Carrier rotation (°)',-90,90)])); robot.addLayout(row)
+        robot.addWidget(self.settings_group('Transfer motion options', [('route_simplification','Route simplification'),('continuous_motion','Continuous motion (queued transfers)')]))
+        robot.addWidget(self.note('Simplification checks shortcuts with the controller before hardware handling; use Check planned route to prepare/save shortcuts for an existing layout. Continuous motion queues horizontal waypoints without an application pause at each point. The controller may still slow or stop at corners; this is not native corner blending. Lifts, descents and gripping still finish separately. Both options are off by default.'))
         robot.addWidget(self.settings_group('Motion', [('robot_velocity','Velocity setting',.1,100),('robot_acceleration','Acceleration setting',.1,100),('motion_timeout','Motion timeout (s)',1,120),('home_timeout','Homing timeout (s)',20,180),('position_tolerance','XYZ tolerance (mm)',.05,5),('rotation_tolerance','R tolerance (°)',.1,5),('grip_dwell','Gripper dwell (s)',.1,10)]))
         robot.addWidget(self.note('XYZ tolerance is the maximum distance between the commanded and reported tool positions; R tolerance is the allowed angular error. Gripper dwell is the wait after an open/close command. Motion/home timeouts limit how long completion is awaited. Velocity and acceleration are SDK settings (0–100), not guaranteed mm/s or mm/s².'))
         for key,tip in {
@@ -448,6 +452,13 @@ class Window(QMainWindow):
         if self.active_command=='plan_layout': self.worker.cancel()
 
     def on_layout_event(self,event):
+        if event['kind']=='simplified':
+            from .layout_planner import signature
+            current=self.read_settings(validate=False)
+            if event['plan']['signature']==signature(current):
+                self.s.transfer_plan=event['plan']
+                self.update_calibration_feedback(invalidate=False)
+            return
         if self.layout_wizard: self.layout_wizard.event_received(event)
 
     def apply_layout_plan(self,values):

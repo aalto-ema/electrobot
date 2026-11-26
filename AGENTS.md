@@ -23,6 +23,7 @@
 - Connection must not home or actuate the gripper. Homing remains explicit; a stopped hardware robot requires rehoming before motion.
 - **Normal gripper release is pump off:** `grip(False, enable=False, queued=False)`. Closing uses `True, enable=True`. Powered full-open is an explicit manual action. Display commanded grip state, not claimed pickup detection.
 - Preserve stop/cancellation, queue completion and pose verification, cell-off cleanup, held-electrode disconnect guards, and partial-data retention. Do not add automatic recovery movement without defining the recovery behavior with the user.
+- Continuous transfer mode uses bounded queued MOVL commands, not verified native CP blending. Keep lift/descent/gripper completion barriers and controller queue-space checks; do not silently fall back on queue or simplification failure.
 - A rehearsal must never measure or create electrochemistry CSV data. It may operate an explicitly connected potentiostat only to turn its cell off.
 - Do not use physical hardware as a software test. Hardware operation needs authorization for the operation; continue relevant work within an already authorized commissioning session without repeated permission requests.
 - Configured workspace bounds are distinct from controller reachability checks. The latter query supported firmware limits at sampled path poses; neither establishes obstacle, whole-path or joint-limit clearance between samples. Never describe them as collision detection or a hardware safety certification.

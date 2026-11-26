@@ -92,6 +92,17 @@ Applied profiles store the transfer network and its settings signature. **Check 
 
 Controller acceptance at samples is not continuous-path, obstacle, cable or swept-gripper clearance. No hardware fit or physical route is certified by the wizard. Simulation does not invent controller reach; it can replay a saved plan as simulated movement.
 
+## Transfer motion options
+
+**Settings → Robot calibration → Transfer motion options** has two independent checkboxes, both off by default:
+
+- **Route simplification:** before hardware handling, query candidate shortcut segments and remove unnecessary intermediate waypoints. Rejected shortcuts retain the original route around the limit. For an existing layout, enable this and run **Manual robot → Check planned route** to prepare the shortcuts without moving, then save configuration. New wizard searches also compile shortcuts when enabled. Hardware batches refresh/check them again; simulation uses only already saved shortcuts and never invents controller acceptance. Turn the checkbox off to use the original graph.
+- **Continuous motion (queued transfers):** send horizontal MOVL waypoints ahead of execution, rather than wait/verify at each intermediate point. A rolling window holds at most 16 outstanding commands and respects reported queue space. The arm still finishes and verifies each clearance lift, final horizontal endpoint and descent before any gripper action. Stop, alarms, progress monitoring and timeouts remain active. Unsupported queue-space feedback produces an explicit error; there is no silent fallback.
+
+This is **queued point-to-point motion, not native CP corner blending**. It removes Electrobot's per-waypoint waiting overhead, but the controller may still decelerate or stop at corners, and communication can affect queue continuity. The pinned Python SDK supports queued `MOVL_XYZ`; the reviewed [DobotLink Lite virtual-controller source](https://github.com/Dobot-Arm/DobotLink/blob/80c6ad78010721648ad671cc47320604d303f1d9/Plugins/MagicDevicePlugin/magicianlite_virtual/src/runtime/dcps/cmd.cpp) has an unimplemented CP motion handler, so native CP blending is not assumed. Actual smoothness on the lab controller remains unverified.
+
+Both options preserve the taught heights and station stops. Changing either clears calibration readiness. Simplification needs controller pose checks and a saved layout plan; for a direct single-segment transfer there are no intermediate waypoints to remove.
+
 ## Manual robot
 
 Use **Manual robot** to read the reported pose, home, jog XYZ/R, move to an absolute target, and release/close/fully open the gripper. Commands run in the same serialized worker as experiments, so batch and manual operations cannot compete for a device. Operations and mode changes are disabled during an active command.

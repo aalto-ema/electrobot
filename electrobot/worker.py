@@ -98,7 +98,11 @@ class DeviceWorker(QThread):
                     elif command=='check_route':
                         if self.mode!='hardware': raise ValueError('Controller route check requires Hardware mode and a connected robot')
                         pose=self.robot.pose()
-                        self.robot.preflight_route(s.planned_route(tuple(pose[k] for k in ('x','y','z','r'))))
+                        initial=tuple(pose[k] for k in ('x','y','z','r'))
+                        self.robot.prepare_transfers(initial)
+                        self.robot.preflight_route(s.planned_route(initial))
+                        if s.route_simplification and s.transfer_plan:
+                            self.layout_event.emit({'kind':'simplified','plan':s.transfer_plan})
                     elif command=='clear_alarms': self.robot.clear_alarms()
                     elif command=='layout_pose':
                         pose=self.robot.pose()

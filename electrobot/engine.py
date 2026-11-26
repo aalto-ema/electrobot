@@ -44,6 +44,10 @@ class SimRobot:
             self.current_pose={k:start[k]+(target[k]-start[k])*step/10 for k in target}
             self.diagnostic(actual=dict(self.current_pose))
             self.pose_callback(dict(self.current_pose))
+    def transfer(self,points):
+        # Simulation follows the same geometry; it does not claim hardware blending.
+        for pose in points: self.move(pose)
+
     def grip(self,closed):
         self.control.wait(.4/self.s.simulation_speed); self.holding=closed
         self.gripper_state='closed' if closed else 'released'
@@ -107,12 +111,20 @@ class Experiment:
         def travel(x,y,z):
             # Raise at the current station before crossing to another station.
             current=robot.pose()
-            for _,pose in s.travel_steps(tuple(current[k] for k in ('x','y','z','r')),(x,y,z)):
-                robot.move(pose)
+            steps=s.travel_steps(tuple(current[k] for k in ('x','y','z','r')),(x,y,z))
+            robot.move(steps[0][1])
+            if s.continuous_motion:
+                robot.transfer([pose for _,pose in steps[1:-1]])
+            else:
+                for _,pose in steps[1:-1]: robot.move(pose)
+            robot.move(steps[-1][1])
         def lift(x,y): robot.move((x,y,s.safe_z))
         try:
             if pot is not None: pot.cell_off()
             if s.mode=='hardware' and hasattr(robot,'preflight_route'):
+                if hasattr(robot,'prepare_transfers'):
+                    robot.prepare_transfers(tuple(initial[k] for k in ('x','y','z','r')))
+                    (folder/'settings.json').write_text(json.dumps(asdict(s),indent=2))
                 emit('preflight','Checking planned lift, transfer and station poses without moving')
                 robot.preflight_route(s.planned_route(tuple(initial[k] for k in ('x','y','z','r'))))
             if self.rehearsal: emit('rehearsal','Robot-only rehearsal: gripper actuates; no measurement or electrochemistry data')

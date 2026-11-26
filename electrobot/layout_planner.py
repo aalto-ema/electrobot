@@ -37,7 +37,9 @@ def validate_plan(plan):
         if max(abs(v) for v in p[:3])>400 or abs(p[3])>90: raise ValueError('Transfer plan pose exceeds planner search range')
         if p[2:]!=nodes[0][2:]: raise ValueError('Transfer waypoints must share a fixed height and rotation')
     if not isinstance(edges,list) or len(edges)>6000: raise ValueError('Invalid transfer plan edges')
-    for edge in edges:
+    shortcuts=plan.get('shortcut_edges',[])
+    if not isinstance(shortcuts,list) or len(shortcuts)>6000: raise ValueError('Invalid simplified transfer edges')
+    for edge in edges+shortcuts:
         if not isinstance(edge,list) or len(edge)!=2 or any(type(i) is not int or not 0<=i<len(nodes) for i in edge) or edge[0]==edge[1]:
             raise ValueError('Invalid transfer plan edge')
     if not isinstance(plan.get('signature'),str) or len(plan['signature'])!=64: raise ValueError('Missing transfer plan settings signature')
@@ -82,10 +84,43 @@ def transfer_waypoints(s,start,target):
             raise ValueError('Robot or station is outside the saved transfer graph. Find a working layout again from the current pose.')
         return i
     a,b=locate(start),locate(target)
-    path=[tuple(nodes[i]) for i in shortest(adjacency(nodes,plan['edges']),a,b)]
+    path=[tuple(nodes[i]) for i in shortest(adjacency(nodes,plan['edges']+(plan.get('shortcut_edges',[]) if s.route_simplification else [])),a,b)]
     # Include the source node: a reported pose can differ slightly from its target.
     if math.dist(path[-1][:2],target[:2])>1e-8: path.append((*target[:2],s.safe_z,s.tool_r))
     return path
+
+
+def simplify_transfers(settings,initial,segment,check=lambda:None):
+    """Greedy farthest-accepted shortcuts for this batch; retain the base graph."""
+    from copy import deepcopy
+    s=replace(settings,transfer_plan=deepcopy(settings.transfer_plan),route_simplification=False)
+    if not s.transfer_plan: return s.transfer_plan
+    s.transfer_plan.pop('shortcut_edges',None)
+    route=s.planned_route(initial)  # Also rejects stale/out-of-coverage plans.
+    nodes=s.transfer_plan['nodes']; lookup={tuple(p):i for i,p in enumerate(nodes)}
+    groups=[]; group=[]
+    for label,pose in route:
+        if ' transfer ' in label: group.append(tuple(pose))
+        elif group: groups.append(group); group=[]
+    if group: groups.append(group)
+    edges=set(); tried={}
+    for points in groups:
+        check(); indices=[]
+        for p in points:
+            if p in lookup and (not indices or indices[-1]!=lookup[p]): indices.append(lookup[p])
+        start=0
+        while start<len(indices)-1:
+            check(); chosen=start+1
+            for end in range(len(indices)-1,start+1,-1):
+                key=tuple(sorted((indices[start],indices[end])))
+                if key not in tried: tried[key]=segment(nodes[indices[start]],nodes[indices[end]])
+                if tried[key]:
+                    edges.add(key); chosen=end; break
+            start=chosen
+    s.transfer_plan['shortcut_edges']=[list(e) for e in sorted(edges)]
+    s.transfer_plan['simplification']={'source':'controller segment queries','checked_candidates':len(tried),'shortcuts':len(edges)}
+    validate_plan(s.transfer_plan)
+    return s.transfer_plan
 
 
 class LayoutPlanner:
@@ -212,6 +247,10 @@ class LayoutPlanner:
                   initial_pose=list(initial),requested=count,capacity=capacity,spacing=spacing,slot_count=len(proposed.rack_export_positions()))
         validate_plan(plan); proposed.transfer_plan=plan
         # Resolve every actual sequence transfer, including initial entry, before offering Apply.
+        if proposed.route_simplification:
+            self.progress('Checking shortcut segments to simplify transfer routes…')
+            proposed.transfer_plan=simplify_transfers(proposed,initial,self.segment,self.check)
+            plan=proposed.transfer_plan
         route=proposed.planned_route(initial)
         for (_,a),(_,b) in zip(route,route[1:]): self.required(a,b,'Final experiment route')
         plan['queries']=self.queries

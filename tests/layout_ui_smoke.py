@@ -51,6 +51,15 @@ with tempfile.TemporaryDirectory() as directory,patch.object(app_module,'ROOT',P
         assert not wizard.apply.isEnabled()
         wizard.review.setChecked(True); wizard.apply.click(); app.processEvents()
         applied=w.read_settings(); assert applied.transfer_plan and applied.electrodes==32
+        original_waypoints=len(applied.planned_route((220,0,0,0)))
+        w.fields['route_simplification'].setChecked(True)
+        calls=len(arm.calls); w.submit('check_route'); idle()
+        applied=w.read_settings()
+        assert applied.transfer_plan['shortcut_edges']
+        assert len(applied.planned_route((220,0,0,0)))<original_waypoints
+        assert 'passed' in w.robot_diagnostics['preflight']
+        assert not any(c in ('stop','clear') or isinstance(c,tuple) and c[0] in ('move','home','grip') for c in arm.calls[calls:])
+
         assert not applied.calibrated and not applied.fixture_verified
         assert 'applied' in wizard.status.text()
         w.save(); assert json.loads(Path(directory,'settings.json').read_text())['transfer_plan']==applied.transfer_plan

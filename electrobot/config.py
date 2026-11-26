@@ -26,6 +26,8 @@ class Settings:
     position_tolerance: float = 1.0
     rotation_tolerance: float = 1.0
     controller_preflight: bool = True
+    route_simplification: bool = False
+    continuous_motion: bool = False
     reachability_step: float = 10.0
     motion_stall_timeout: float = 5.0
     tool_r: float = 0.0
@@ -155,6 +157,8 @@ class Settings:
                     'rotation_tolerance','grip_dwell','sdk_timeout','reachability_step','motion_stall_timeout'):
             if getattr(self,key) <= 0:
                 raise ValueError(f'{key} must be positive')
+        if self.route_simplification and not self.controller_preflight:
+            raise ValueError('Route simplification requires controller pose checks')
         if self.workspace_map:
             from .workspace_map import validate_saved_map
             validate_saved_map(self.workspace_map)

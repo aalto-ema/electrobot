@@ -62,20 +62,26 @@ class PlannerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'edge'): validate_plan(s.transfer_plan)
 
     def test_rehearsal_executes_exact_preflight_waypoints(self):
-        s=self.plan(count=3); s.mode='hardware'; s.calibrated=True; s.fixture_verified=True
+        s=self.plan(count=3); s.mode='hardware'; s.calibrated=True; s.fixture_verified=True; s.continuous_motion=True
         class ImmediateControl(Control):
             def wait(self,seconds): self.check()
         class RecordingRobot(SimRobot):
             def __init__(self,s,c):
-                super().__init__(s,c); self.current_pose=dict(x=220,y=0,z=0,r=0); self.moves=[]
+                super().__init__(s,c); self.current_pose=dict(x=220,y=0,z=0,r=0); self.moves=[]; self.transfers=[]
             def move(self,p):
                 self.moves.append(tuple(p) if len(p)==4 else (*p,self.s.tool_r))
                 self.current_pose=dict(zip(('x','y','z','r'),self.moves[-1]))
+            def transfer(self,points):
+                self.transfers.append(list(points))
+                self.assert_horizontal=all(p[2]==self.s.safe_z and p[3]==self.s.tool_r for p in points)
+                assert self.assert_horizontal
+                super().transfer(points)
             def preflight_route(self,route): self.checked=route
         c=ImmediateControl(); robot=RecordingRobot(s,c)
         with tempfile.TemporaryDirectory() as d:
             _,status=Experiment(s,c,lambda e:None,lambda *a:self.fail('Rehearsal measured'),d,robot=robot,rehearsal=True).run()
         self.assertEqual(status,'completed')
+        self.assertTrue(robot.transfers)
         self.assertEqual(robot.moves,[p for _,p in robot.checked[1:]])
 
     def test_subset_rehearsal_and_protocol_changes_reuse_plan(self):

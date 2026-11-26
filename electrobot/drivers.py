@@ -109,8 +109,8 @@ class DobotRobot:
         if not all(math.isfinite(float(pose[k])) for k in ('x','y','z','r')):
             raise RuntimeError('Robot returned an invalid pose')
         self.diagnostic(actual=dict(pose)); self.pose_callback(pose); return pose
-    def _wait_index(self,index,timeout,target=None):
-        if not isinstance(index,int): raise RuntimeError('Dobot did not return a queued command index')
+    def _wait_index(self,index,timeout,target=None,feed=None):
+        if not callable(index) and type(index) is not int: raise RuntimeError('Dobot did not return a queued command index')
         deadline=time.monotonic()+timeout; stable=0; last_error='Queue has not completed'
         previous=None; last_progress=time.monotonic(); alarm_read=0
         try:
@@ -128,7 +128,9 @@ class DobotRobot:
                     if xyz_error<=self.s.position_tolerance and rotation_error<=self.s.rotation_tolerance: last_progress=now
                     elif now-last_progress>=self.s.motion_stall_timeout:
                         raise self._fault(f'No reported motion progress for {self.s.motion_stall_timeout:g} s. Possible reach/joint limit, obstruction or controller fault; cause is not confirmed. Stop and inspect, then home before motion.')
-                if self.arm.cmds.current_index()>=index:
+                if feed is not None: feed()
+                final_index=index() if callable(index) else index
+                if final_index is not None and self.arm.cmds.current_index()>=final_index:
                     reached=True
                     if target is not None:
                         xyz_error=math.dist([float(pose[k]) for k in ('x','y','z')],target[:3])
@@ -164,6 +166,89 @@ class DobotRobot:
         self.arm.set_speed(self.s.robot_velocity,self.s.robot_acceleration)
         index=self.arm.move_to(*target,mode=PTPMode.MOVL_XYZ,wait=False)
         self._wait_index(index,self.s.motion_timeout,target)
+    def queue_space(self):
+        self.control.check()
+        try:
+            response=response_params(self.arm.cmds._call('GetQueuedCmdLeftSpace',call_timeout=self.s.robot_timeout))
+            value=response.get('leftSpace') if isinstance(response,dict) else None
+            if type(value) not in (int,float) or not math.isfinite(value) or value<0 or value!=int(value):
+                raise ValueError('Missing non-negative integer leftSpace')
+            return int(value)
+        except Cancelled: raise
+        except Exception as exc:
+            raise RuntimeError('Continuous queued transfers unavailable: '+str(exc)+'. Disable Continuous motion to use individual moves.') from exc
+
+    def prepare_transfers(self,initial):
+        """Read-only feature checks and shortcut compilation before any handling."""
+        if self.s.continuous_motion: self.queue_space()
+        if self.s.route_simplification and self.s.transfer_plan:
+            from .layout_planner import LayoutPlanner,simplify_transfers
+            planner=LayoutPlanner(self.s,self.controller_limited,self.control.check,
+                lambda text:self.diagnostic(preflight='Simplifying transfers: '+text))
+            self.diagnostic(preflight='Checking shortcut segments without movement')
+            plan=simplify_transfers(self.s,initial,planner.segment,self.control.check)
+            self.s.transfer_plan=plan
+            self.diagnostic(preflight=f'Prepared {len(plan.get("shortcut_edges",[]))} controller-checked shortcut segments')
+
+    def transfer(self,points):
+        """Queue fixed-Z/R MOVL segments; no native CP blending is claimed."""
+        if not self.s.continuous_motion:
+            for point in points: self.move(point)
+            return
+        if not self.homed: raise RuntimeError('Home the robot before moving')
+        if not points: return
+        current=self.pose(); start=tuple(current[k] for k in ('x','y','z','r'))
+        targets=[tuple(p) for p in points]
+        # Only horizontal transfer blocks may be queued. Vertical clearance,
+        # endpoint verification and gripper actions remain synchronous barriers.
+        for target in targets:
+            self.s.validate_pose(target)
+            if len(target)!=4 or abs(target[2]-self.s.safe_z)>1e-6 or abs(target[3]-self.s.tool_r)>1e-6:
+                raise ValueError('Continuous transfers require fixed Travel Z and tool R')
+        if abs(start[2]-self.s.safe_z)>self.s.position_tolerance or abs((start[3]-self.s.tool_r+180)%360-180)>self.s.rotation_tolerance:
+            raise ValueError('Complete the clearance lift and tool rotation before a continuous transfer')
+        self.control.check(); self.check_alarms(); self.queue_space()
+        previous=start
+        for target in targets:
+            for sample in segment_samples(previous,target,self.s.reachability_step): self.check_pose(sample,'queued transfer')
+            previous=target
+        # Drop only exact duplicate targets; small measured offsets still get checked.
+        compact=[]; previous=start
+        for target in targets:
+            if math.dist(previous,target)>1e-8: compact.append(target)
+            previous=target
+        if not compact: return
+        targets=compact; final=targets[-1]
+        self.diagnostic(target=dict(zip(('x','y','z','r'),final)),rejected_pose=None)
+        from dobotkit import PTPMode
+        cursor=0; pending=[]; last_index=None
+        try:
+            self.arm.set_speed(self.s.robot_velocity,self.s.robot_acceleration)
+            self.arm.cmds.queue_stop(); self.arm.cmds.queue_clear()
+            last_index=self.arm.cmds.current_index()
+            def feed():
+                nonlocal cursor,last_index,pending
+                self.control.check()
+                completed=self.arm.cmds.current_index()
+                pending=[i for i in pending if i>completed]
+                slots=min(16-len(pending),self.queue_space(),len(targets)-cursor)
+                for _ in range(max(0,slots)):
+                    self.control.check()
+                    index=self.arm.move_to(*targets[cursor],mode=PTPMode.MOVL_XYZ,wait=False)
+                    if type(index) is not int or index<=last_index:
+                        raise RuntimeError('Controller returned an invalid or non-increasing queued motion index')
+                    pending.append(index); last_index=index; cursor+=1
+            feed()
+            if cursor==0: raise RuntimeError('Controller queue has no space for the transfer')
+            self.control.check(); self.check_alarms(); self.arm.cmds.queue_start()
+            self._wait_index(lambda:last_index if cursor==len(targets) else None,
+                             self.s.motion_timeout*len(targets),final,feed=feed)
+        except Exception as exc:
+            if not isinstance(exc,Cancelled) and not self.diagnostics['fault']: self._fault(str(exc))
+            try: self.stop()
+            except Exception as cleanup: self.diagnostic(fault=self.diagnostics['fault']+'\nRobot stop failed: '+str(cleanup))
+            raise
+
     def grip(self,closed):
         self.control.check()
         self.arm.effector.grip(bool(closed),enable=bool(closed),queued=False)

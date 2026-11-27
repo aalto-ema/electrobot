@@ -46,6 +46,16 @@ class QueuedArm(FakeArm):
 
 
 class MotionOptionsTests(unittest.TestCase):
+    def test_saved_route_removes_only_forward_collinear_stops(self):
+        from electrobot.layout_planner import FORMAT,signature,transfer_waypoints
+        s=Settings()
+        xy=[(180,0),(190,0),(200,0),(210,0),(210,10),(210,20),(210,15),(211,16)]
+        nodes=[[x,y,s.safe_z,s.tool_r] for x,y in xy]
+        s.transfer_plan=dict(format=FORMAT,signature=signature(s),slot_count=32,
+            initial_pose=nodes[0],nodes=nodes,edges=[[i,i+1] for i in range(len(nodes)-1)])
+        route=transfer_waypoints(s,nodes[0],nodes[-1])
+        self.assertEqual([p[:2] for p in route],[xy[i] for i in (0,3,5,6,7)])
+
     def test_simplification_preserves_rejected_chord_and_reduces_waypoints(self):
         s=replace(Settings().screening_preset(),cell_x=0.,cell_y=-220.,rinse_x=0.,rinse_y=220.,rinse_dips=1)
         limited=lambda p:math.hypot(*p[:2])<190 or math.hypot(*p[:2])>310

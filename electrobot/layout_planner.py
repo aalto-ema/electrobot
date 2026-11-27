@@ -87,7 +87,21 @@ def transfer_waypoints(s,start,target):
     path=[tuple(nodes[i]) for i in shortest(adjacency(nodes,plan['edges']+(plan.get('shortcut_edges',[]) if s.route_simplification else [])),a,b)]
     # Include the source node: a reported pose can differ slightly from its target.
     if math.dist(path[-1][:2],target[:2])>1e-8: path.append((*target[:2],s.safe_z,s.tool_r))
-    return path
+    # A straight MOVL spans consecutive graph edges on the same line.
+    # Keep the first and last node, every turn, and every reversal.
+    waypoints=[]
+    for point in path:
+        if len(waypoints)>=2:
+            a,b=waypoints[-2:]
+            dx,dy=point[0]-a[0],point[1]-a[1]
+            bx,by=b[0]-a[0],b[1]-a[1]
+            length=math.hypot(dx,dy)
+            projection=bx*dx+by*dy
+            if (length and a[2:]==b[2:]==point[2:] and 0<projection<length*length
+                    and abs(dx*by-dy*bx)<=1e-8*length):
+                waypoints.pop()
+        waypoints.append(point)
+    return waypoints
 
 
 def simplify_transfers(settings,initial,segment,check=lambda:None):

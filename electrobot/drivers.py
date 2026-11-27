@@ -14,6 +14,7 @@ class DobotRobot:
         self.arm_factory=arm_factory; self.arm=None; self.holding=False; self.homed=False; self.gripper_state='unknown'
         self.diagnostic_callback=lambda d:None
         self.diagnostics={'target':None,'actual':None,'fault':'','alarms':[],'alarm_monitor':'not checked','preflight':'not checked'}
+        self._applied_speed=None
         self._checked=set(); self._check_control=None
     def diagnostic(self,**values):
         self.diagnostics.update(values); self.diagnostic_callback(dict(self.diagnostics))
@@ -91,6 +92,12 @@ class DobotRobot:
             self.check_alarms()
             previous=target
         self.diagnostic(fault='',preflight=('Controller sampled route passed; not a collision check' if self.s.controller_preflight else 'Controller check disabled; application bounds '+('enabled' if self.s.workspace_enabled else 'disabled')))
+    def _apply_speed(self):
+        speed=(self.s.robot_velocity,self.s.robot_acceleration)
+        if speed!=self._applied_speed:
+            self.arm.set_speed(*speed)
+            self._applied_speed=speed
+
     def connect(self):
         if self.arm is not None: return
         try:
@@ -99,7 +106,7 @@ class DobotRobot:
                 self.arm_factory=MagicianLite
             self.arm=self.arm_factory(port=self.s.robot_port,host=self.s.robot_host,
                 ws_port=self.s.robot_ws_port,timeout=self.s.robot_timeout,auto_connect=False)
-            self.arm.connect(); self.arm.set_speed(self.s.robot_velocity,self.s.robot_acceleration)
+            self.arm.connect(); self._applied_speed=None; self._apply_speed()
             self.poll_health()
         except Exception:
             if self.arm is not None:
@@ -169,8 +176,12 @@ class DobotRobot:
         for sample in segment_samples(tuple(current[k] for k in ('x','y','z','r')),target,self.s.reachability_step): self.check_pose(sample,'requested move')
         from dobotkit import PTPMode
         self.check_alarms()
+        # A completed lift or source graph node can appear again as the
+        # first target of the next transfer. Keep checks, skip zero travel.
+        if all(abs(current[k]-v)<=1e-5 for k,v in zip(('x','y','z','r'),target)):
+            return
         self.diagnostic(phase="individual movement")
-        self.arm.set_speed(self.s.robot_velocity,self.s.robot_acceleration)
+        self._apply_speed()
         index=self.arm.move_to(*target,mode=PTPMode.MOVL_XYZ,wait=False)
         self._wait_index(index,self.s.motion_timeout,target)
     def queue_space(self):
@@ -241,12 +252,13 @@ class DobotRobot:
         from dobotkit import PTPMode
         cursor=0; pending=[]; last_index=None
         try:
-            self.arm.set_speed(self.s.robot_velocity,self.s.robot_acceleration)
+            self._apply_speed()
             self.arm.cmds.queue_stop(); self.arm.cmds.queue_clear()
             last_index=self.arm.cmds.current_index()
             def feed():
                 nonlocal cursor,last_index,pending
                 self.control.check()
+                if cursor==len(targets): return
                 completed=self.arm.cmds.current_index()
                 pending=[i for i in pending if i>completed]
                 slots=min(16-len(pending),self.queue_space(),len(targets)-cursor)

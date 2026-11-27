@@ -77,6 +77,17 @@ class MotionOptionsTests(unittest.TestCase):
         with patch.dict('sys.modules',{'dobotkit':SimpleNamespace(PTPMode=SimpleNamespace(MOVL_XYZ=2))}):
             r.transfer(points)
 
+    def test_repeated_lift_does_not_enqueue_stationary_motion(self):
+        robot=self.robot()
+        with patch.dict('sys.modules',{'dobotkit':SimpleNamespace(PTPMode=SimpleNamespace(MOVL_XYZ=2))}):
+            robot.move((201,0,80,0))
+            robot.move((201,0,80,0))
+            robot.s.robot_velocity+=1
+            robot.move((202,0,80,0))
+        calls=robot.arm.calls
+        self.assertEqual([c[1][0] for c in calls if c[0]=='move'],[201,202])
+        self.assertEqual(sum(c[0]=='speed' for c in calls),2)
+
     def test_streams_bounded_queue_with_no_per_waypoint_wait_and_final_verification(self):
         r=self.robot(); points=[(200+i,0,80,0) for i in range(1,24)]
         self.transfer(r,points)

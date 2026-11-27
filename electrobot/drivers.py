@@ -23,11 +23,14 @@ def mac_robot_port(ports):
 
 
 class DobotRobot:
+    LIMIT_QUERY_INTERVAL = 0.1
     def __init__(self,s,control,pose_callback=lambda p:None,arm_factory=None):
         self.s=s; self.control=control; self.pose_callback=pose_callback
         self.arm_factory=arm_factory; self.arm=None; self.holding=False; self.homed=False; self.gripper_state='unknown'
         self.diagnostic_callback=lambda d:None
         self.diagnostics={'target':None,'actual':None,'fault':'','alarms':[],'alarm_monitor':'not checked','preflight':'not checked'}
+        self._planning_queue_paused=False
+        self._last_limit_query=0.0
         self._applied_speed=None
         self._checked=set(); self._check_control=None
     def diagnostic(self,**values):
@@ -87,11 +90,21 @@ class DobotRobot:
         """Query only; deliberately independent of the user's workspace bounds."""
         self.control.check()
         if len(target)!=4 or not all(math.isfinite(v) for v in target): raise ValueError('Invalid query pose')
+        # Worker-serialized queries run only between completed movements.
+        if not self._planning_queue_paused:
+            self.arm.cmds.queue_stop()
+            self._planning_queue_paused=True
         self.diagnostics['last_query_pose']=dict(zip(('x','y','z','r'),target))
-        response=response_params(self.arm.cmds._call('CheckPoseLimit',call_timeout=self.s.robot_timeout,
-            isJoint=False,**dict(zip(('x','y','z','r'),target))))
+        # Leave idle time between expensive firmware inverse-kinematics queries.
+        self.control.wait(max(0.0,self.LIMIT_QUERY_INTERVAL-(time.monotonic()-self._last_limit_query)))
+        try:
+            response=response_params(self.arm.cmds._call('CheckPoseLimit',call_timeout=self.s.robot_timeout,
+                isJoint=False,**dict(zip(('x','y','z','r'),target))))
+        finally:
+            self._last_limit_query=time.monotonic()
         limited=response.get('isLimited') if isinstance(response,dict) else None
         if type(limited) is not bool: raise ValueError('Missing boolean isLimited in controller response')
+        self.check_alarms()
         return limited
     def preflight_route(self,route):
         self._checked.clear(); self._check_control=self.control
@@ -132,7 +145,7 @@ class DobotRobot:
                 self.diagnostic(connection_port=port)
             self.arm=factory(port=port,host=self.s.robot_host,
                 ws_port=self.s.robot_ws_port,timeout=self.s.robot_timeout,auto_connect=False)
-            self.arm.connect(); self._applied_speed=None; self._apply_speed()
+            self.arm.connect(); self._planning_queue_paused=False; self._applied_speed=None; self._apply_speed()
             self.poll_health()
         except Exception:
             if self.arm is not None:
@@ -185,7 +198,7 @@ class DobotRobot:
             raise
     def home(self):
         self.diagnostic(phase="homing")
-        self.control.check(); self.check_alarms(); self.arm.cmds.queue_start()
+        self.control.check(); self.check_alarms(); self.arm.cmds.queue_start(); self._planning_queue_paused=False
         self.diagnostic(target=dict(zip(('x','y','z','r'),(200.,0.,0.,0.))),rejected_pose=None)
         self._wait_index(self.arm.home(wait=False),self.s.home_timeout,(200.0,0.0,0.0,0.0))
         self.homed=True; self._checked.clear(); self.diagnostic(fault='',preflight='Not checked after homing')
@@ -209,6 +222,14 @@ class DobotRobot:
         self.diagnostic(phase="individual movement")
         self._apply_speed()
         index=self.arm.move_to(*target,mode=PTPMode.MOVL_XYZ,wait=False)
+        if self._planning_queue_paused:
+            try:
+                self.control.check()
+                self.arm.cmds.queue_start()
+                self._planning_queue_paused=False
+            except Exception:
+                self.stop()
+                raise
         self._wait_index(index,self.s.motion_timeout,target)
     def queue_space(self):
         self.control.check()
@@ -232,7 +253,13 @@ class DobotRobot:
             self.diagnostic(phase='transfer preparation: after queue-space query')
             self.check_alarms()
         if self.s.route_simplification and self.s.transfer_plan:
-            from .layout_planner import LayoutPlanner,simplify_transfers
+            from .layout_planner import LayoutPlanner,simplify_transfers,validate_plan,signature
+            validate_plan(self.s.transfer_plan)
+            if self.s.transfer_plan['signature']!=signature(self.s):
+                raise ValueError('Layout settings changed. Find a working layout again.')
+            if self.s.transfer_plan.get('shortcut_edges'):
+                self.diagnostic(preflight='Reusing saved shortcuts; route will be checked before movement')
+                return
             planner=LayoutPlanner(self.s,self.controller_limited,self.control.check,
                 lambda text:self.diagnostic(preflight='Simplifying transfers: '+text))
             self.diagnostic(preflight='Checking shortcut segments without movement')
@@ -296,7 +323,7 @@ class DobotRobot:
                     pending.append(index); last_index=index; cursor+=1
             feed()
             if cursor==0: raise RuntimeError('Controller queue has no space for the transfer')
-            self.control.check(); self.check_alarms(); self.arm.cmds.queue_start()
+            self.control.check(); self.check_alarms(); self.arm.cmds.queue_start(); self._planning_queue_paused=False
             self._wait_index(lambda:last_index if cursor==len(targets) else None,
                              self.s.motion_timeout*len(targets),final,feed=feed)
         except Exception as exc:

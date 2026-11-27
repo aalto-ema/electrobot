@@ -60,7 +60,7 @@ class PreflightAlarmTests(unittest.TestCase):
             robot.preflight_route([('initial',(200,0,0,0)),('lift',(200,0,80,0))])
         self.assertNotIn('passed',robot.diagnostics['preflight'])
         self.assertEqual(robot.diagnostics['last_query_pose']['z'],0)
-        self.assertIn('route validation: after initial',robot.diagnostics['fault'])
+        self.assertIn('route validation:',robot.diagnostics['fault'])
         self.assertFalse(any(isinstance(c,tuple) and c[0]=='move' for c in robot.arm.calls))
 
     def test_shortcut_alarm_does_not_publish_plan(self):
@@ -68,7 +68,11 @@ class PreflightAlarmTests(unittest.TestCase):
         from electrobot.drivers import DobotRobot
         from electrobot.engine import Control
         from test_drivers import FakeArm
-        s=Settings(route_simplification=True,transfer_plan={'original':True})
+        from electrobot.layout_planner import FORMAT,signature
+        s=Settings(route_simplification=True)
+        original=dict(format=FORMAT,signature=signature(s),slot_count=3,
+            initial_pose=[200,0,0,0],nodes=[[200,0,80,0],[210,0,80,0]],edges=[[0,1]])
+        s.transfer_plan=original
         robot=DobotRobot(s,Control(),arm_factory=FakeArm); robot.connect()
         def simplify(*args):
             robot.arm.alarms[12]=16
@@ -76,7 +80,7 @@ class PreflightAlarmTests(unittest.TestCase):
         with patch('electrobot.layout_planner.simplify_transfers',side_effect=simplify):
             with self.assertRaisesRegex(RuntimeError,'after shortcut queries'):
                 robot.prepare_transfers((200,0,0,0))
-        self.assertEqual(s.transfer_plan,{'original':True})
+        self.assertEqual(s.transfer_plan,original)
 
     def test_mac_auto_ignores_system_ports_and_requires_unique_available_usb(self):
         from electrobot.drivers import mac_robot_port
@@ -103,3 +107,38 @@ class PreflightAlarmTests(unittest.TestCase):
         robot.s.robot_direct_speed=False
         robot._apply_speed()
         self.assertEqual(calls[-1],('legacy',(20,20)))
+
+    def test_saved_shortcuts_are_reused_but_stale_geometry_is_rejected(self):
+        from unittest.mock import patch
+        from electrobot.drivers import DobotRobot
+        from electrobot.engine import Control
+        from electrobot.layout_planner import FORMAT,signature
+        from test_drivers import FakeArm
+        s=Settings(route_simplification=True)
+        s.transfer_plan=dict(format=FORMAT,signature=signature(s),slot_count=3,
+            initial_pose=[200,0,0,0],nodes=[[200,0,80,0],[210,0,80,0]],
+            edges=[[0,1]],shortcut_edges=[[0,1]])
+        robot=DobotRobot(s,Control(),arm_factory=FakeArm);robot.connect()
+        with patch('electrobot.layout_planner.simplify_transfers') as compiler:
+            robot.prepare_transfers((200,0,0,0))
+            compiler.assert_not_called()
+        s.safe_z+=1
+        with self.assertRaisesRegex(ValueError,'settings changed'):
+            robot.prepare_transfers((200,0,0,0))
+
+    def test_reachability_query_is_paced_and_cancellable(self):
+        from unittest.mock import patch,Mock
+        from electrobot.drivers import DobotRobot
+        from electrobot.engine import Control,Cancelled
+        from test_drivers import FakeArm
+        control=Control()
+        robot=DobotRobot(Settings(),control,arm_factory=FakeArm);robot.connect()
+        control.wait=Mock()
+        with patch('electrobot.drivers.time.monotonic',return_value=10):
+            robot.controller_limited((200,0,0,0))
+            robot.controller_limited((201,0,0,0))
+        self.assertAlmostEqual(control.wait.call_args.args[0],robot.LIMIT_QUERY_INTERVAL)
+        control.cancel.set()
+        before=len(robot.arm.calls)
+        with self.assertRaises(Cancelled): robot.controller_limited((202,0,0,0))
+        self.assertEqual(len(robot.arm.calls),before)

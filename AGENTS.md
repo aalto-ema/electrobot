@@ -33,7 +33,7 @@
 ## Settings, coordinates and data
 
 - `Settings` is the source of truth. Add backwards-compatible defaults for new fields; connect UI read/apply, validation and readiness invalidation as appropriate.
-- Use `Settings.travel_steps()` for both route preflight and execution. Saved transfer plans must not silently fall back to straight chords when stale, disconnected or out of coverage; require replanning or explicit removal. Layout planning is controller-query-only and must preserve taught clearance heights.
+- Use `Settings.travel_steps()` for both route preflight and execution. Saved transfer plans must not silently fall back to straight chords when stale, disconnected or out of coverage; require replanning or explicit removal. Layout planning preserves taught clearance heights and pauses the idle command queue during paced reachability queries. Resume only when a checked movement is uploaded.
 - Use `Settings.rack_pose()` and `rack_export_positions()` for movement, diagrams, CAD and placement guides. Do not create a second slot-mapping formula in the UI or exports.
 - Lengths are mm; tool R and rack angles are degrees; voltages are V; exported current is µA. Distinguish measured hardware data from synthetic data.
 - Robot Z is the reported tool coordinate. Printed seat height and electrode tip depth are different physical quantities; do not infer or overwrite taught Z from CAD.

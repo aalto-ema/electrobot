@@ -15,7 +15,7 @@ from test_drivers import FakeArm
 
 app=QApplication([]); app.setStyle('Fusion'); app.setStyleSheet(STYLE)
 warnings=[]
-with tempfile.TemporaryDirectory() as directory,patch.object(app_module,'ROOT',Path(directory)),patch.object(QMessageBox,'warning',side_effect=lambda *a:warnings.append(a[-1])),patch.object(worker_module,'DobotRobot',side_effect=lambda s,c:DobotRobot(s,c,arm_factory=FakeArm)):
+with patch.object(DobotRobot,'LIMIT_QUERY_INTERVAL',0),tempfile.TemporaryDirectory() as directory,patch.object(app_module,'ROOT',Path(directory)),patch.object(QMessageBox,'warning',side_effect=lambda *a:warnings.append(a[-1])),patch.object(worker_module,'DobotRobot',side_effect=lambda s,c:DobotRobot(s,c,arm_factory=FakeArm)):
     w=Window(); w.show()
     def idle():
         deadline=time.monotonic()+30
@@ -44,7 +44,7 @@ with tempfile.TemporaryDirectory() as directory,patch.object(app_module,'ROOT',P
         assert wizard.proposal and wizard.proposal.electrodes==32
         assert w.read_settings()==before  # Preview never applies automatically.
         assert w.device_state['homed']
-        assert not any(c in ('stop','clear') or isinstance(c,tuple) and c[0] in ('move','home','grip') for c in arm.calls[calls:])
+        assert not any(c=='clear' or isinstance(c,tuple) and c[0] in ('move','home','grip') for c in arm.calls[calls:])
         wizard.grab().save('cad/ui-layout-preview.png')
         wizard.resize(850,680); app.processEvents(); wizard.grab().save('cad/ui-layout-preview-compact.png')
         assert wizard.width()<=850 and wizard.height()<=680
@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory() as directory,patch.object(app_module,'ROOT',P
         assert applied.transfer_plan['shortcut_edges']
         assert len(applied.planned_route((220,0,0,0)))<original_waypoints
         assert 'passed' in w.robot_diagnostics['preflight']
-        assert not any(c in ('stop','clear') or isinstance(c,tuple) and c[0] in ('move','home','grip') for c in arm.calls[calls:])
+        assert not any(c=='clear' or isinstance(c,tuple) and c[0] in ('move','home','grip') for c in arm.calls[calls:])
 
         assert not applied.calibrated and not applied.fixture_verified
         assert 'applied' in wizard.status.text()
@@ -73,7 +73,7 @@ with tempfile.TemporaryDirectory() as directory,patch.object(app_module,'ROOT',P
         arm.limited=cancel_query; calls=len(arm.calls)
         wizard.find.click(); idle()
         assert wizard.proposal is None and w.device_state['homed']
-        assert not any(c in ('stop','clear') for c in arm.calls[calls:])
+        assert not any(c=='clear' for c in arm.calls[calls:])
         assert w.read_settings().transfer_plan==applied.transfer_plan
         # Unsupported firmware offers no partial/fallback proposal.
         arm.limited=lambda p:False; arm.unsupported=True

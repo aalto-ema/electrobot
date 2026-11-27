@@ -182,7 +182,13 @@ class DriverTests(unittest.TestCase):
         self.assertIn('stop',r.arm.calls); self.assertFalse(r.homed); r.disconnect()
     def test_stop_during_queued_motion(self):
         r=self.robot(); r.home(); r.arm.pending=True
-        timer=threading.Timer(.02,r.control.cancel.set); timer.start()
+        timer=threading.Timer(.02,r.control.cancel.set)
+        original_move=r.arm.move_to
+        def begin_move(*args,**kwargs):
+            index=original_move(*args,**kwargs)
+            timer.start()
+            return index
+        r.arm.move_to=begin_move
         try:
             with patch.dict('sys.modules',{'dobotkit':SimpleNamespace(PTPMode=SimpleNamespace(MOVL_XYZ=2))}),self.assertRaises(Cancelled):
                 r.move((210,0,20,0))

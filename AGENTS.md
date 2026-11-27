@@ -2,7 +2,7 @@
 
 ## Start here
 
-- Use the user’s local checkout at `/Users/yerga/My Drive/Development/electrobot` for ongoing development. It was synchronized from the temporary checkout on 2026-11-27. Keep new changes and the runnable environment here.
+- Use the migrated local checkout at `/Users/yerga/Documents/Development/electrobot` for ongoing development. The user confirmed this is the Codex project folder on 2026-11-27. Older session metadata may still name the obsolete My Drive path. Keep new changes and the runnable environment in the Documents checkout.
 
 - Read this file, `README.md`, and the relevant parts of `docs/ARCHITECTURE.md` and `docs/PROJECT_STATUS.md` before changing behavior.
 - Inspect `git status` first. Preserve the user's work, local calibration profiles, and measurement data.

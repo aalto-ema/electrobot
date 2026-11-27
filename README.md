@@ -38,6 +38,8 @@ For hardware, additionally install:
 python -m pip install -r requirements-hardware.txt
 ```
 
+For robot-only use on macOS, install `dobotkit==0.2.0` in the app virtual environment and start DobotLink (5.13.0 tested). Select Hardware and click Connect robot. Local auto discovery selects a single USB serial port. If several are listed, enter the MagicBox `cu.usbmodem…` port in Settings → Devices.
+
 On the Windows lab computer:
 
 - Install the **.NET Desktop Runtime 10.0** matching your Python architecture. The packaged PalmSens Windows runtime configuration requires both `Microsoft.NETCore.App` and `Microsoft.WindowsDesktop.App` 10.0.

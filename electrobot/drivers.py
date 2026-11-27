@@ -1,12 +1,26 @@
 """Lazy hardware adapters. All device calls belong to the device worker thread."""
 import asyncio
 import math
+import sys
 import time
 from pathlib import Path
 from .engine import Cancelled
 from .robot_checks import segment_samples,response_params,alarm_codes,alarm_description
 
 CURRENT_RANGES={.001:'1nA',.01:'10nA',.1:'100nA',1:'1uA',10:'10uA',100:'100uA',1000:'1mA',10000:'10mA'}
+
+def mac_robot_port(ports):
+    """Select one USB callout port, excluding system ports and tty aliases."""
+    candidates=[p for p in ports if isinstance(p,dict) and
+                str(p.get('portName','')).removeprefix('/dev/').startswith(('cu.usbmodem','cu.usbserial'))]
+    if len(candidates)!=1:
+        names=', '.join(p['portName'] for p in candidates) or 'none'
+        raise RuntimeError(f'USB robot ports found: {names}. Select the MagicBox port in Settings → Devices.')
+    port=candidates[0]
+    if port.get('status')!='unconnected':
+        raise RuntimeError(f"{port['portName']} is unavailable. Disconnect the robot in the other client first.")
+    return port['portName']
+
 
 class DobotRobot:
     def __init__(self,s,control,pose_callback=lambda p:None,arm_factory=None):
@@ -101,10 +115,18 @@ class DobotRobot:
     def connect(self):
         if self.arm is not None: return
         try:
-            if self.arm_factory is None:
+            port=self.s.robot_port
+            factory=self.arm_factory
+            if factory is None:
                 from dobotkit import MagicianLite
-                self.arm_factory=MagicianLite
-            self.arm=self.arm_factory(port=self.s.robot_port,host=self.s.robot_host,
+                factory=MagicianLite
+                if port=='auto' and sys.platform=='darwin' and self.s.robot_host in ('localhost','127.0.0.1','::1'):
+                    from dobotkit.link import DobotLinkClient
+                    client=DobotLinkClient(host=self.s.robot_host,port=self.s.robot_ws_port,timeout=self.s.robot_timeout).connect()
+                    try: port=mac_robot_port(client.call('Magician.SearchDobot'))
+                    finally: client.close()
+                self.diagnostic(connection_port=port)
+            self.arm=factory(port=port,host=self.s.robot_host,
                 ws_port=self.s.robot_ws_port,timeout=self.s.robot_timeout,auto_connect=False)
             self.arm.connect(); self._applied_speed=None; self._apply_speed()
             self.poll_health()

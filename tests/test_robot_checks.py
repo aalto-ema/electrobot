@@ -77,3 +77,13 @@ class PreflightAlarmTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'after shortcut queries'):
                 robot.prepare_transfers((200,0,0,0))
         self.assertEqual(s.transfer_plan,{'original':True})
+
+    def test_mac_auto_ignores_system_ports_and_requires_unique_available_usb(self):
+        from electrobot.drivers import mac_robot_port
+        ports=[{'portName':p,'status':'unconnected'} for p in
+               ('cu.Bluetooth-Incoming-Port','cu.debug-console','tty.usbmodem1','cu.usbmodem1')]
+        self.assertEqual(mac_robot_port(ports),'cu.usbmodem1')
+        with self.assertRaisesRegex(RuntimeError,'Select'):
+            mac_robot_port(ports+[{'portName':'cu.usbserial2','status':'unconnected'}])
+        ports[-1]['status']='connected'
+        with self.assertRaisesRegex(RuntimeError,'unavailable'): mac_robot_port(ports)

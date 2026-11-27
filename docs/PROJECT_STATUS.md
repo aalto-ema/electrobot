@@ -154,3 +154,5 @@ Verification: 77 unit tests and three offscreen UI checks passed with simulated/
 
 
 On 2026-11-27, after operator recovery to the home pose and zero alarms, live 10 mm X transfers at Y=Z=R=0 completed and returned to X=200. Five individually awaited 2 mm moves took 8.14 s, queued MOVL took 7.45 s, one straight move took 3.67 s, and one straight move at Cartesian velocity/acceleration 20 with common ratios 100% took 1.62 s. All completed without alarms. Original Cartesian settings and common ratios (20) were restored and read back. The new opt-in direct-speed checkbox exposes the tested setting. These measurements cover a short straight route. Curved transfers and the original alarm-100 layout remain unverified.
+
+On 2026-11-27 the repository was synchronized to the user’s local project folder, `/Users/yerga/My Drive/Development/electrobot`, with GitHub as origin. Future development uses this checkout and its own virtual environment. The former temporary checkout is retained as a backup.

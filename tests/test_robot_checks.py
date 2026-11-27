@@ -60,7 +60,8 @@ class PreflightAlarmTests(unittest.TestCase):
             robot.preflight_route([('initial',(200,0,0,0)),('lift',(200,0,80,0))])
         self.assertNotIn('passed',robot.diagnostics['preflight'])
         self.assertEqual(robot.diagnostics['last_query_pose']['z'],0)
-        self.assertIn('route validation:',robot.diagnostics['fault'])
+        self.assertIn('route validation: checking initial',robot.diagnostics['fault'])
+        self.assertIn('Last reachability query: X=200.00',robot.diagnostics['fault'])
         self.assertFalse(any(isinstance(c,tuple) and c[0]=='move' for c in robot.arm.calls))
 
     def test_shortcut_alarm_does_not_publish_plan(self):

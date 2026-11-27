@@ -39,6 +39,8 @@ class DobotRobot:
         target=self.diagnostics['target']; actual=self.diagnostics['actual']
         def fmt(p): return ', '.join(f'{k.upper()}={p[k]:.2f}' for k in ('x','y','z','r')) if p else 'unavailable'
         message=f'{reason}\nPhase: {self.diagnostics.get("phase","unspecified")}\nRequested: {fmt(target)}\nReported: {fmt(actual)}'
+        if self.diagnostics.get('phase','').startswith('route validation:') and self.diagnostics.get('last_query_pose'):
+            message+=f'\nLast reachability query: {fmt(self.diagnostics["last_query_pose"])}'
         self.diagnostic(fault=message); return RuntimeError(message)
     def read_alarms(self):
         raw=None
@@ -113,7 +115,7 @@ class DobotRobot:
         self.check_alarms()
         previous=route[0][1]
         for i,(label,target) in enumerate(route):
-            self.diagnostic(preflight=f'Checking {i+1}/{len(route)}: {label}',target=dict(zip(('x','y','z','r'),target)))
+            self.diagnostic(phase='route validation: checking '+label,preflight=f'Checking {i+1}/{len(route)}: {label}',target=dict(zip(('x','y','z','r'),target)))
             for sample in segment_samples(previous,target,self.s.reachability_step): self.check_pose(sample,label)
             self.diagnostic(phase='route validation: after '+label)
             self.check_alarms()

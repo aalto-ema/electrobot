@@ -18,6 +18,7 @@ class Settings:
     first_electrode: int = 1
     robot_host: str = 'localhost'
     robot_ws_port: int = 9090
+    robot_direct_speed: bool = False
     robot_velocity: float = 20.0
     robot_acceleration: float = 20.0
     robot_timeout: float = 5.0

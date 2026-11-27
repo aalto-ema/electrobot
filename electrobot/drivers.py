@@ -107,9 +107,13 @@ class DobotRobot:
             previous=target
         self.diagnostic(fault='',preflight=('Controller sampled route passed; not a collision check' if self.s.controller_preflight else 'Controller check disabled; application bounds '+('enabled' if self.s.workspace_enabled else 'disabled')))
     def _apply_speed(self):
-        speed=(self.s.robot_velocity,self.s.robot_acceleration)
+        speed=(self.s.robot_velocity,self.s.robot_acceleration,self.s.robot_direct_speed)
         if speed!=self._applied_speed:
-            self.arm.set_speed(*speed)
+            if self.s.robot_direct_speed:
+                self.arm.cmds.set_ptp_coordinate_params(*speed[:2])
+                self.arm.cmds.set_ptp_common_params(100,100)
+            else:
+                self.arm.set_speed(*speed[:2])
             self._applied_speed=speed
 
     def connect(self):

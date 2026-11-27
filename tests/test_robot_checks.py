@@ -87,3 +87,19 @@ class PreflightAlarmTests(unittest.TestCase):
             mac_robot_port(ports+[{'portName':'cu.usbserial2','status':'unconnected'}])
         ports[-1]['status']='connected'
         with self.assertRaisesRegex(RuntimeError,'unavailable'): mac_robot_port(ports)
+
+    def test_direct_speed_applies_cartesian_and_full_ratio(self):
+        from types import SimpleNamespace
+        from electrobot.drivers import DobotRobot
+        from electrobot.engine import Control
+        calls=[]
+        robot=DobotRobot(Settings(robot_direct_speed=True),Control())
+        robot.arm=SimpleNamespace(cmds=SimpleNamespace(
+            set_ptp_coordinate_params=lambda *v:calls.append(('cartesian',v)),
+            set_ptp_common_params=lambda *v:calls.append(('ratio',v))),
+            set_speed=lambda *v:calls.append(('legacy',v)))
+        robot._apply_speed(); robot._apply_speed()
+        self.assertEqual(calls,[('cartesian',(20,20)),('ratio',(100,100))])
+        robot.s.robot_direct_speed=False
+        robot._apply_speed()
+        self.assertEqual(calls[-1],('legacy',(20,20)))

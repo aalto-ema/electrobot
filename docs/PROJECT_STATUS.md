@@ -1,6 +1,6 @@
 # Project status and open design decisions
 
-Last reviewed: 2026-11-26. Update this document when capabilities or physical evidence change. Source code describes behavior; a passing mocked test is not a lab commissioning result.
+Last reviewed: 2026-11-27. Update this document when capabilities or physical evidence change. Source code describes behavior; a passing mocked test is not a lab commissioning result.
 
 ## Established project choices
 
@@ -28,6 +28,8 @@ Last reviewed: 2026-11-26. Update this document when capabilities or physical ev
 - Unit tests, offscreen UI checks and a mocked hardware UI integration check. No cloud service is required to run the app.
 
 ## Physical evidence and assumptions
+
+On 2026-11-27, DobotLink 5.13.0 running from the mounted installer image on Apple Silicon macOS connected to the MagicBox USB serial port through the pinned dobotkit client. The explicit `cu.usbmodem…` port was needed because discovery also listed unrelated serial ports. Pose, alarm state and 32 free queue slots were read successfully, then the session disconnected. Alarm IDs 0 and 73 were already present. No motion or alarm clearing was tested, and alarm 100 was absent in this snapshot. The earlier Mac App Store build (5.5.13) returned error 122 opening the same device.
 
 On 2026-11-26 the user reported controller alarm 100 (0x64), currently displayed as unmapped, after the transfer-motion options were introduced. The user clarified that a separate route check passed with simplification, but the check inside rehearsal raised the alarm; both options enabled also produced the error. The exact failing pose and physical firmware alarm meaning remain unknown. No causal link to queued transfers or workspace limits is established. A confirmed software gap was corrected: preflight previously read alarms only before route queries, allowing a query-time alarm to escape a successful check. Checks now also read alarms after shortcut compilation, queue-space probing and each route target, retain phase/last query/options, and refuse to publish shortcuts when an alarm is detected. This prevents false success but is not a confirmed fix for the underlying controller alarm. Next evidence: Manual robot → Diagnostic details → Copy diagnostic report, option states, and the alarm description shown by Dobot software. Leave continuous motion disabled while investigating; no automatic alarm clearing or recovery movement has been added.
 
